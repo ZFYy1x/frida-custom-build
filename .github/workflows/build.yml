@@ -71,8 +71,8 @@ jobs:
     - name: Apply upstream strongR patches
       run: |-
         cd frida-src
-        git config user.name "w_zhangfeifei20"
-        git config user.email "1141415869@qq.com"
+        git config --global user.name "w_zhangfeifei20"
+        git config --global user.email "1141415869@qq.com"
         # Apply proven upstream anti-detection patches
         # Patches are made against subproject root (e.g. frida-core/lib/base/rpc.vala)
         for subproject in frida-core frida-gum; do
