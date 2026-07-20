@@ -82,6 +82,21 @@ jobs:
           libunwind-dev autoconf automake libtool \
           cmake graphviz python3-setuptools \
           libssl-dev zlib1g-dev
+    - name: Download Android NDK
+      run: |
+        NDK_VERSION="r27b"
+        NDK_DIR="/tmp/android-ndk"
+        if [ ! -d "$NDK_DIR" ]; then
+          echo "Downloading Android NDK ${NDK_VERSION}..."
+          curl -sL "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip" -o /tmp/ndk.zip
+          unzip -q /tmp/ndk.zip -d /tmp/
+          mv /tmp/android-ndk-${NDK_VERSION} $NDK_DIR
+          echo "NDK installed at $NDK_DIR"
+        else
+          echo "NDK already exists at $NDK_DIR"
+        fi
+        echo "NDK=$NDK_DIR" >> $GITHUB_ENV
+        ls -la $NDK_DIR/
     - name: Build frida-server
       run: |-
         cd frida-src
@@ -90,11 +105,14 @@ jobs:
         CROSS_FILE="subprojects/frida-core/tools/linux-${{ matrix.meson_host }}-cross.txt"
         echo "Using cross file: $CROSS_FILE"
         cat "$CROSS_FILE"
+        NDK="${{ env.NDK }}"
         meson setup build-android-${{ matrix.arch }} \
           --cross-file="$CROSS_FILE" \
           -Dprefix=/usr/local/frida-custom-${{ matrix.arch }} \
           -Doptimization=s \
-          -Dstrip=true
+          -Dstrip=true \
+          -Dandroid_sdk="$NDK" \
+          -Dandroid_ndk_platform=21
         ninja -C build-android-${{ matrix.arch }} frida-server frida-agent
         mkdir -p /tmp/frida-out-${{ matrix.arch }}
         cp build-android-${{ matrix.arch }}/subprojects/frida-core/frida-server /tmp/frida-out-${{ matrix.arch }}/ 2>/dev/null || \

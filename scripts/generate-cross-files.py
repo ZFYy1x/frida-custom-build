@@ -19,6 +19,7 @@ pkgconfig = 'pkg-config'
 
 [host_machine]
 system = 'linux'
+subsystem = 'android'
 cpu_family = 'aarch64'
 cpu = 'aarch64'
 endian = 'little'
@@ -32,6 +33,7 @@ pkgconfig = 'pkg-config'
 
 [host_machine]
 system = 'linux'
+subsystem = 'android'
 cpu_family = 'arm'
 cpu = 'armv7hl'
 endian = 'little'
