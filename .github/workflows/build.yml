@@ -41,20 +41,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - arch: arm64
-          cross: aarch64-linux-gnu
-          abi: arm64-v8a
-          gcc_pkg: gcc-aarch64-linux-gnu
-          gpp_pkg: g++-aarch64-linux-gnu
-          binutils_pkg: binutils-aarch64-linux-gnu
-          meson_host: aarch64-linux-gnu
-        - arch: armhf
-          cross: arm-linux-gnueabihf
+        - arch: android-arm
+          host: android-arm
           abi: armeabi-v7a
-          gcc_pkg: gcc-arm-linux-gnueabihf
-          gpp_pkg: g++-arm-linux-gnueabihf
-          binutils_pkg: binutils-arm-linux-gnueabihf
-          meson_host: arm-linux-gnueabihf
+          gcc: arm-linux-gnueabihf-gcc
+        - arch: android-arm64
+          host: android-arm64
+          abi: arm64-v8a
+          gcc: aarch64-linux-gnu-gcc
+        - arch: android-x86
+          host: android-x86
+          abi: x86
+          gcc: i686-linux-gnu-gcc
+        - arch: android-x86_64
+          host: android-x86_64
+          abi: x86_64
+          gcc: x86_64-linux-gnu-gcc
     steps:
     - name: Checkout custom Frida repo
       uses: actions/checkout@v4
@@ -70,54 +72,60 @@ jobs:
       run: |-
         chmod +x scripts/deep-patch-src.py
         python3 scripts/deep-patch-src.py frida-src
-    - name: Install cross-compilation dependencies
+    - name: Install build dependencies
       run: |-
         sudo apt update
         sudo apt install -y \
-          ${{ matrix.gcc_pkg }} ${{ matrix.gpp_pkg }} ${{ matrix.binutils_pkg }} \
-          ninja-build meson ccache pkg-config \
+          build-essential tree ninja-build \
+          gcc-multilib g++-multilib lib32stdc++-9-dev \
+          flex bison ruby ruby-dev \
+          python3-requests python3-setuptools python3-dev python3-pip \
+          libc6-dev libc6-dev-i386 \
+          ccache pkg-config \
           libglib2.0-dev liblzma-dev liblz4-dev \
           libssl-dev libreadline-dev libxml2-dev \
           libsqlite3-dev libcapstone-dev libyaml-dev \
           libunwind-dev autoconf automake libtool \
-          cmake graphviz python3-setuptools \
-          libssl-dev zlib1g-dev
-    - name: Download Android NDK
-      run: |
-        NDK_VERSION="r27b"
-        NDK_DIR="/tmp/android-ndk"
-        if [ ! -d "$NDK_DIR" ]; then
-          echo "Downloading Android NDK ${NDK_VERSION}..."
-          curl -sL "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip" -o /tmp/ndk.zip
-          unzip -q /tmp/ndk.zip -d /tmp/
-          mv /tmp/android-ndk-${NDK_VERSION} $NDK_DIR
-          echo "NDK installed at $NDK_DIR"
-        else
-          echo "NDK already exists at $NDK_DIR"
-        fi
-        echo "NDK=$NDK_DIR" >> $GITHUB_ENV
-        ls -la $NDK_DIR/
+          cmake graphviz
+        python3 -m pip install lief
+    - name: Setup Android NDK
+      uses: nttld/setup-ndk@v1.0.6
+      with:
+        ndk-version: r25b
+    - name: Show NDK path
+      run: echo "NDK=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
     - name: Build frida-server
       run: |-
         cd frida-src
-        # Generate cross files if not present
-        python3 ../scripts/generate-cross-files.py .
-        CROSS_FILE="subprojects/frida-core/tools/linux-${{ matrix.meson_host }}-cross.txt"
-        echo "Using cross file: $CROSS_FILE"
-        cat "$CROSS_FILE"
+        # Set up NDK environment
         NDK="${{ env.NDK }}"
-        meson setup build-android-${{ matrix.arch }} \
-          --cross-file="$CROSS_FILE" \
-          -Dprefix=/usr/local/frida-custom-${{ matrix.arch }} \
-          -Doptimization=s \
-          -Dstrip=true \
-          -Dandroid_sdk="$NDK" \
-          -Dandroid_ndk_platform=21
-        ninja -C build-android-${{ matrix.arch }} frida-server frida-agent
-        mkdir -p /tmp/frida-out-${{ matrix.arch }}
-        cp build-android-${{ matrix.arch }}/subprojects/frida-core/frida-server /tmp/frida-out-${{ matrix.arch }}/ 2>/dev/null || \
-          cp build-android-${{ matrix.arch }}/frida-server /tmp/frida-out-${{ matrix.arch }}/
-        find build-android-${{ matrix.arch }} -name 'frida-agent-*.so' -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
+        export ANDROID_NDK_ROOT="$NDK"
+        export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+        
+        # Build for each architecture using Frida's configure script
+        for HOST in ${{ matrix.host }}; do
+          echo "=== Building for $HOST ==="
+          mkdir -p build-$HOST
+          cd build-$HOST
+          
+          # Run Frida's configure with Android host
+          ../configure --host=$HOST \
+            --prefix=/tmp/frida-custom-$HOST \
+            --enable-optimizations \
+            --disable-debug
+          
+          # Build
+          make -j$(nproc)
+          
+          # Collect artifacts
+          mkdir -p /tmp/frida-out-${{ matrix.arch }}
+          cp subprojects/frida-core/server/frida-server /tmp/frida-out-${{ matrix.arch }}/ 2>/dev/null || \
+            cp frida-server /tmp/frida-out-${{ matrix.arch }}/ 2>/dev/null || true
+          find . -name 'frida-agent-*.so' -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
+          
+          cd ..
+        done
+        echo "Build complete for ${{ matrix.arch }}"
     - name: Run deep binary anti-anti-frida patch
       run: |-
         python3 scripts/anti-anti-frida-deep.py /tmp/frida-out-${{ matrix.arch }}/frida-server
@@ -166,10 +174,16 @@ jobs:
           Auto-built custom Frida ${{ needs.detect-version.outputs.frida_version }} with deep anti-anti-frida patches.
           Based on Frida ${{ needs.detect-version.outputs.frida_version }}.
 
-          ## Layers
-          - Layer 1: source patches (frida-core + libgum, 40+ rules, XOR helper)
-          - Layer 2: binary post-process (LIEF symbols/SONAME/.rodata/.build-id, byte-level)
-          - Layer 3: runtime bypass script (16 detection types)
+          ## Build System
+          - Based on strongR-frida-android build approach
+          - Uses `./configure --host=<arch>` + `make` (not meson/ninja)
+          - Android NDK r25b via `nttld/setup-ndk`
+          - 4 architectures: android-arm, android-arm64, android-x86, android-x86_64
+
+          ## Patches Applied
+          - Layer 1: Deep source patches (frida-core + libgum, 40+ string replacements, XOR helper)
+          - Layer 2: Binary post-process (LIEF symbols/SONAME/.rodata/.build-id, byte-level)
+          - Layer 3: Runtime bypass script (16 detection types: strstr/strcmp, open/read, fgets, dlopen, pthread, prctl, etc.)
 
           ## Usage
           1. adb push hluda-*-android-arm64/frida-server /data/local/tmp/
