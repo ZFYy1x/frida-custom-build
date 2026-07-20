@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
     inputs:
       frida_version:
-        description: Frida version to build (e.g. 17.16.2)
+        description: "Frida version to build (default: 17.15.0, latest with verified patches)"
         required: false
-        default: ''
+        default: '17.15.0'
 
 jobs:
   android_build:
@@ -95,9 +95,10 @@ jobs:
         export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
         export ANDROID_NDK_ROOT="$NDK"
 
+        # Use workflow_dispatch input, or default to 17.15.0 (latest with verified patches)
         VERSION="${{ github.event.inputs.frida_version }}"
         if [ -z "$VERSION" ]; then
-          VERSION=$(curl -sL https://api.github.com/repos/frida/frida/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          VERSION="17.15.0"
         fi
         echo "Building Frida $VERSION for ${{ matrix.arch }}"
 
@@ -107,7 +108,7 @@ jobs:
         git checkout "$VERSION"
         git submodule update --init --recursive --depth 1
 
-        echo "Apply patches to frida-core and frida-gum"
+        echo "Apply Florida patches to frida-core and frida-gum"
         for path in ../patches/*
         do
           name=$(basename "$path")
@@ -178,7 +179,7 @@ jobs:
       run: |-
         VERSION="${{ github.event.inputs.frida_version }}"
         if [ -z "$VERSION" ]; then
-          VERSION=$(curl -sL https://api.github.com/repos/frida/frida/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          VERSION="17.15.0"
         fi
 
         PKG="hluda-${VERSION}-android-${{ matrix.arch }}"
