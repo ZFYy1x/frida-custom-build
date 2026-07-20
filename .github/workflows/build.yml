@@ -74,9 +74,19 @@ jobs:
         git config user.name "w_zhangfeifei20"
         git config user.email "1141415869@qq.com"
         # Apply proven upstream anti-detection patches
-        for p in ../patches/strongR-frida/frida-core/*.patch; do
-          echo "Applying $p"
-          git am "$p" || { echo "Failed to apply $p"; exit 1; }
+        # Patches are made against subproject root (e.g. frida-core/lib/base/rpc.vala)
+        for subproject in frida-core frida-gum; do
+          if [ -d "subprojects/$subproject" ]; then
+            echo "=== Applying patches to subprojects/$subproject ==="
+            cd subprojects/$subproject
+            for p in ../../../patches/strongR-frida/$subproject/*.patch; do
+              if [ -f "$p" ]; then
+                echo "Applying $p"
+                git am "$p" || { echo "Failed to apply $p"; exit 1; }
+              fi
+            done
+            cd ../../
+          fi
         done
         echo "All upstream patches applied"
         
