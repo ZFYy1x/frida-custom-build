@@ -26,64 +26,22 @@ XOR_KEY = 0x55              # XOR key for runtime-encoded strings
 # Layer 1: String replacement rules (pattern, replacement, file_glob)
 # ---------------------------------------------------------------------------
 STRING_RULES = [
-    # Server / process names
-    (r'"frida-server"', f'"{PREFIX}"'),
-    (r"'frida-server'", f"'{PREFIX}'"),
-    (r'"frida-agent"', f'"{PREFIX}-agent"'),
-    (r"'frida-agent'", f"'{PREFIX}-agent'"),
-    (r'frida-agent-', f'{AGENT_PREFIX}-agent-'),
-    (r'"frida_agent_main"', f'"{PREFIX}_agent_main"'),
-    (r"'frida_agent_main'", f"'{PREFIX}_agent_main'"),
+    # Runtime-safe strings only.
+    # DO NOT rename compile-time constants (FRIDA_LIBDIR, FRIDA_VERSION, FRIDA_AGENT_EMBED, etc.)
+    # Those are defined in config.vapi/meson.build; upstream strongR patches handle those in source.
 
-    # D-Bus / directory paths
+    # D-Bus address - runtime
     (r'"re\.frida\.server"', f'"re.{DBUS_PREFIX}.server"'),
     (r'"re\.frida\.(server|agent)"', f'"re.{DBUS_PREFIX}.\\1"'),
     (r're\.frida\.', f're.{DBUS_PREFIX}.'),
-    (r'FRIDA_SERVER', f'{PREFIX.upper()}_SERVER'),
-    (r'FRIDA_AGENT', f'{PREFIX.upper()}_AGENT'),
 
-    # RPC channel
+    # RPC channel - runtime (strongR patch 1 style, but via regex here)
     (r'"frida:rpc"', f'(string)GLib.Base64.decode("{RPC_B64}")'),
-    (r"'frida:rpc'", f"(string)GLib.Base64.decode(\"{RPC_B64}\")"),
+    (r"'frida:rpc'", f'(string)GLib.Base64.decode(\\"{RPC_B64}\\")'),
 
-    # linjector pipe prefix
-    (r'"linjector-', f'"{PREFIX}-'),
-    (r"'linjector-", f"'{PREFIX}-"),
-    (r'linjector-%u', f'{PREFIX}injector-%p%u'),
-
-    # memfd name (multiple variants)
-    (r'MEMFD_CREATE,\s*name', f'MEMFD_CREATE, "{PREFIX}-memfd"'),
-    (r'MEMFD_CREATE,\s*"frida', f'MEMFD_CREATE, "{PREFIX}-memfd"'),
-    (r'"frida-agent"', f'"{PREFIX}-memfd"'),
-
-    # Gadget names
-    (r'"frida-gadget', f'"{PREFIX}-gadget'),
-    (r'"frida-eternal-agent"', f'"{PREFIX}-eternal-agent"'),
-    (r'"frida-generate-certificate"', f'"{PREFIX}-generate-certificate"'),
-    (r'frida-gadget-tcp-', f'{PREFIX}-gadget-tcp-'),
-    (r'frida-gadget-unix-', f'{PREFIX}-gadget-unix-'),
-    (r'frida-error-quark', f'{PREFIX}-error-quark'),
-
-    # SONAME patterns
-    (r'libfrida-gadget-raw', f'lib{PREFIX}-gadget-raw'),
-    (r'libfrida-agent-raw', f'lib{PREFIX}-agent-raw'),
-    (r'libfrida-portal', f'lib{PREFIX}-portal'),
-    (r'libfrida-inject', f'lib{PREFIX}-inject'),
-
-    # Tool names
-    (r'"frida-compress"', f'"{PREFIX}-compress"'),
-    (r'"frida-push"', f'"{PREFIX}-push"'),
-    (r'"frida-portal"', f'"{PREFIX}-portal"'),
-    (r'"frida-ps"', f'"{PREFIX}-ps"'),
-    (r'"frida-ldattach"', f'"{PREFIX}-ldattach"'),
-    (r'"frida-kill"', f'"{PREFIX}-kill"'),
-
-    # Temp paths
+    # Temp paths - runtime
     (r'/tmp/frida', f'/tmp/{PREFIX}'),
     (r'"/data/local/tmp/frida', f'"/data/local/tmp/{PREFIX}'),
-
-    # Misc constants
-    (r'FRIDA_', f'{PREFIX.upper()}_'),
 ]
 
 # Thread-specific replacements
