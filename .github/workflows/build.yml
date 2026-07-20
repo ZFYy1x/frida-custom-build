@@ -68,10 +68,20 @@ jobs:
         cd frida-src
         git submodule update --init --recursive --depth 1
         echo "Source ready at frida-src/"
-    - name: Apply deep source patches (frida-core + libgum)
+    - name: Apply upstream strongR patches
+      run: |-
+        cd frida-src
+        # Apply proven upstream anti-detection patches
+        for p in ../patches/strongR-frida/frida-core/*.patch; do
+          echo "Applying $p"
+          git am "$p" || { echo "Failed to apply $p"; exit 1; }
+        done
+        echo "All upstream patches applied"
+        
+    - name: Apply deep source patches (optional)
       run: |-
         chmod +x scripts/deep-patch-src.py
-        python3 scripts/deep-patch-src.py frida-src
+        python3 scripts/deep-patch-src.py frida-src || echo "Deep patch failed, continuing with upstream patches only"
     - name: Install build dependencies
       run: |-
         sudo apt update
