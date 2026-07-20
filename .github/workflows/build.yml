@@ -85,9 +85,11 @@ jobs:
     - name: Build frida-server
       run: |-
         cd frida-src
+        # Generate cross files if not present
+        python3 ../scripts/generate-cross-files.py .
         CROSS_FILE="subprojects/frida-core/tools/linux-${{ matrix.meson_host }}-cross.txt"
         echo "Using cross file: $CROSS_FILE"
-        ls -la subprojects/frida-core/tools/ || true
+        cat "$CROSS_FILE"
         meson setup build-android-${{ matrix.arch }} \
           --cross-file="$CROSS_FILE" \
           -Dprefix=/usr/local/frida-custom-${{ matrix.arch }} \
