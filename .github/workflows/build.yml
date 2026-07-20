@@ -105,9 +105,15 @@ jobs:
         echo "Apply superrepo patch (adds tools/build-android-all.sh)"
         git apply ../patches/deliver/superrepo.patch
 
-        echo "Apply frida-core and frida-gum patches"
-        git apply ../patches/deliver/frida-core.patch
-        git apply ../patches/deliver/frida-gum.patch
+        echo "Apply frida-core patch to subprojects/frida-core"
+        cd subprojects/frida-core
+        git apply ../../../patches/deliver/frida-core.patch
+        cd ../../
+
+        echo "Apply frida-gum patch to subprojects/frida-gum"
+        cd subprojects/frida-gum
+        git apply ../../../patches/deliver/frida-gum.patch
+        cd ../../
 
         echo "Build using rusda script"
         export ANDROID_NDK_ROOT="$NDK"
