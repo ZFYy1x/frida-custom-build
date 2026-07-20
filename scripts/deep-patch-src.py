@@ -37,7 +37,7 @@ STRING_RULES = [
 
     # D-Bus / directory paths
     (r'"re\.frida\.server"', f'"re.{DBUS_PREFIX}.server"'),
-    (r'"re\.frida\.(server|agent)"', f'"re.{DBUS_PREFIX}.\\2"'),
+    (r'"re\.frida\.(server|agent)"', f'"re.{DBUS_PREFIX}.\\1"'),
     (r're\.frida\.', f're.{DBUS_PREFIX}.'),
     (r'FRIDA_SERVER', f'{PREFIX.upper()}_SERVER'),
     (r'FRIDA_AGENT', f'{PREFIX.upper()}_AGENT'),
