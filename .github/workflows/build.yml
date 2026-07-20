@@ -11,7 +11,7 @@ name: Build Custom Frida
   workflow_dispatch:
     inputs:
       frida_version:
-        description: Frida version to build (e.g. 16.1.11)
+        description: Frida version to build (e.g. 17.16.2)
         required: false
         default: ''
       architectures:
@@ -44,16 +44,22 @@ jobs:
         - arch: arm64
           cross: aarch64-linux-gnu
           abi: arm64-v8a
-          gcc: aarch64-linux-gnu-gcc
+          gcc_pkg: gcc-aarch64-linux-gnu
+          gpp_pkg: g++-aarch64-linux-gnu
+          binutils_pkg: binutils-aarch64-linux-gnu
+          meson_host: aarch64-linux-gnu
         - arch: armhf
           cross: arm-linux-gnueabihf
           abi: armeabi-v7a
-          gcc: arm-linux-gnueabihf-gcc
+          gcc_pkg: gcc-arm-linux-gnueabihf
+          gpp_pkg: g++-arm-linux-gnueabihf
+          binutils_pkg: binutils-arm-linux-gnueabihf
+          meson_host: arm-linux-gnueabihf
     steps:
     - name: Checkout custom Frida repo
       uses: actions/checkout@v4
     - name: Download Frida source
-      run: |
+      run: |-
         VERSION="${{ needs.detect-version.outputs.frida_version }}"
         echo "Building Frida $VERSION for ${{ matrix.arch }}"
         git clone --depth 1 --branch ${VERSION} https://github.com/frida/frida.git frida-src
@@ -61,28 +67,43 @@ jobs:
         git submodule update --init --recursive --depth 1
         echo "Source ready at frida-src/"
     - name: Apply deep source patches (frida-core + libgum)
-      run: |
+      run: |-
         chmod +x scripts/deep-patch-src.py
         python3 scripts/deep-patch-src.py frida-src
     - name: Install cross-compilation dependencies
       run: |-
         sudo apt update
-        sudo apt install -y gcc-${{ matrix.cross }} g++-${{ matrix.cross }} ninja-build meson ccache pkg-config libglib2.0-dev liblzma-dev liblz4-dev libssl-dev libreadline-dev libxml2-dev libsqlite3-dev libcapstone-dev libyaml-dev libunwind-dev autoconf automake libtool cmake graphviz python3-setuptools pkg-config-${{ matrix.cross }}
+        sudo apt install -y \
+          ${{ matrix.gcc_pkg }} ${{ matrix.gpp_pkg }} ${{ matrix.binutils_pkg }} \
+          ninja-build meson ccache pkg-config \
+          libglib2.0-dev liblzma-dev liblz4-dev \
+          libssl-dev libreadline-dev libxml2-dev \
+          libsqlite3-dev libcapstone-dev libyaml-dev \
+          libunwind-dev autoconf automake libtool \
+          cmake graphviz python3-setuptools \
+          libssl-dev zlib1g-dev
     - name: Build frida-server
       run: |-
         cd frida-src
-        CROSS_FILE="subprojects/frida-core/tools/linux-${{ matrix.cross }}-cross.txt"
-        meson setup build-android-${{ matrix.arch }} --cross-file="$CROSS_FILE" -Dprefix=/usr/local/frida-custom-${{ matrix.arch }} -Doptimization=s -Dstrip=true
+        CROSS_FILE="subprojects/frida-core/tools/linux-${{ matrix.meson_host }}-cross.txt"
+        echo "Using cross file: $CROSS_FILE"
+        ls -la subprojects/frida-core/tools/ || true
+        meson setup build-android-${{ matrix.arch }} \
+          --cross-file="$CROSS_FILE" \
+          -Dprefix=/usr/local/frida-custom-${{ matrix.arch }} \
+          -Doptimization=s \
+          -Dstrip=true
         ninja -C build-android-${{ matrix.arch }} frida-server frida-agent
         mkdir -p /tmp/frida-out-${{ matrix.arch }}
-        cp build-android-${{ matrix.arch }}/subprojects/frida-core/frida-server /tmp/frida-out-${{ matrix.arch }}/ 2>/dev/null || cp build-android-${{ matrix.arch }}/frida-server /tmp/frida-out-${{ matrix.arch }}/
+        cp build-android-${{ matrix.arch }}/subprojects/frida-core/frida-server /tmp/frida-out-${{ matrix.arch }}/ 2>/dev/null || \
+          cp build-android-${{ matrix.arch }}/frida-server /tmp/frida-out-${{ matrix.arch }}/
         find build-android-${{ matrix.arch }} -name 'frida-agent-*.so' -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
     - name: Run deep binary anti-anti-frida patch
-      run: |
+      run: |-
         python3 scripts/anti-anti-frida-deep.py /tmp/frida-out-${{ matrix.arch }}/frida-server
         find /tmp/frida-out-${{ matrix.arch }} -name 'frida-agent-*.so' -exec python3 scripts/anti-anti-frida-deep.py {} \;
     - name: Verify deep patch effectiveness
-      run: |
+      run: |-
         python3 scripts/verify-patch-deep.py /tmp/frida-out-${{ matrix.arch }}/frida-server
         find /tmp/frida-out-${{ matrix.arch }} -name 'frida-agent-*.so' -exec python3 scripts/verify-patch-deep.py {} \;
     - name: Package artifact
@@ -122,19 +143,20 @@ jobs:
         tag_name: custom-frida-${{ needs.detect-version.outputs.frida_version }}
         name: Custom Frida ${{ needs.detect-version.outputs.frida_version }}
         body: |-
-          Auto-built custom Frida ${{ needs.detect-version.outputs.frida_version }} with anti-anti-frida patches applied.
+          Auto-built custom Frida ${{ needs.detect-version.outputs.frida_version }} with deep anti-anti-frida patches.
           Based on Frida ${{ needs.detect-version.outputs.frida_version }}.
 
-          ## Patches Applied
-          - Layer 1: Deep source patches (frida-core + libgum, 40+ string replacements, XOR helper)
-          - Layer 2: Binary post-process (LIEF symbols/SONAME/.rodata/.build-id, byte-level replacements)
-          - Layer 3: Runtime bypass script (16 detection types: strstr/strcmp, open/read, fgets, dlopen, pthread, prctl, etc.)
+          ## Layers
+          - Layer 1: source patches (frida-core + libgum, 40+ rules, XOR helper)
+          - Layer 2: binary post-process (LIEF symbols/SONAME/.rodata/.build-id, byte-level)
+          - Layer 3: runtime bypass script (16 detection types)
 
           ## Usage
-          1. Push server to device: adb push hluda-*-android-arm64/frida-server /data/local/tmp/
-          2. Push agent: adb push hluda-*-android-arm64/frida-agent-arm64.so /data/local/tmp/
-          3. Run: chmod 755 frida-server && ./frida-server -l 127.0.0.1:自定义端口 &
-          4. Connect: frida -H 127.0.0.1:自定义端口 -U -f <package>
+          1. adb push hluda-*-android-arm64/frida-server /data/local/tmp/
+          2. adb push hluda-*-android-arm64/frida-agent-arm64.so /data/local/tmp/
+          3. chmod 755 frida-server && ./frida-server -l 127.0.0.1:自定义端口 &
+          4. frida -H 127.0.0.1:自定义端口 -U -f <package>
+          5. Spawn script: -l comprehensive-bypass.js
         files: /tmp/artifacts/**/*.tar.xz
         draft: false
         prerelease: false
