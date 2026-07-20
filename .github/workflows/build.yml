@@ -89,6 +89,7 @@ jobs:
           cmake graphviz
         python3 -m pip install lief
     - name: Setup Android NDK
+      id: setup-ndk
       uses: nttld/setup-ndk@v1.0.6
       with:
         ndk-version: r25b
@@ -110,9 +111,7 @@ jobs:
           
           # Run Frida's configure with Android host
           ../configure --host=$HOST \
-            --prefix=/tmp/frida-custom-$HOST \
-            --enable-optimizations \
-            --disable-debug
+            --prefix=/tmp/frida-custom-$HOST
           
           # Build
           make -j$(nproc)
