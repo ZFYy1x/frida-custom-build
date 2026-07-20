@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       frida_version:
-        description: "Frida version to build (default: 17.15.0, latest with verified patches)"
+        description: "Frida version to build (default: 17.15.0)"
         required: false
         default: '17.15.0'
 
@@ -23,17 +23,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - arch: android-arm
-          host: android-arm
+        - arch: arm
           abi: armeabi-v7a
-        - arch: android-arm64
-          host: android-arm64
+        - arch: arm64
           abi: arm64-v8a
-        - arch: android-x86
-          host: android-x86
+        - arch: x86
           abi: x86
-        - arch: android-x86_64
-          host: android-x86_64
+        - arch: x86_64
           abi: x86_64
 
     steps:
@@ -77,7 +73,7 @@ jobs:
           libssl-dev libreadline-dev libxml2-dev \
           libsqlite3-dev libcapstone-dev libyaml-dev \
           libunwind-dev autoconf automake libtool \
-          cmake graphviz
+          cmake graphviz xz-utils
         sudo gem install fpm -v 1.11.0 --no-document
         python3 -m pip install lief
 
@@ -95,110 +91,56 @@ jobs:
         export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
         export ANDROID_NDK_ROOT="$NDK"
 
-        # Use workflow_dispatch input, or default to 17.15.0 (latest with verified patches)
         VERSION="${{ github.event.inputs.frida_version }}"
         if [ -z "$VERSION" ]; then
           VERSION="17.15.0"
         fi
         echo "Building Frida $VERSION for ${{ matrix.arch }}"
 
-        # Clone frida with submodules
         git clone --recurse-submodules https://github.com/frida/frida.git frida-src
         cd frida-src
         git checkout "$VERSION"
         git submodule update --init --recursive --depth 1
 
-        echo "Apply Florida patches to frida-core and frida-gum"
-        for path in ../patches/*
-        do
-          name=$(basename "$path")
-          real=$(realpath "$path")
-          echo "Apply patches in $real to frida-src/subprojects/$name"
-          cd subprojects/$name
-          git apply "$real"/*.patch || { echo "Failed to apply patch in $name"; exit 1; }
-          cd ../../
-        done
+        echo "Apply superrepo patch (adds tools/build-android-all.sh)"
+        git apply ../patches/deliver/superrepo.patch
 
-        # Configure and build
-        mkdir -p build-${{ matrix.host }}
-        cd build-${{ matrix.host }}
+        echo "Verify patches before applying"
+        python3 ../tools/verify-patch.py --src . --patches ../patches/deliver/
 
-        ../frida-src/configure \
-          --host=${{ matrix.host }} \
-          --prefix=/tmp/frida-custom-${{ matrix.host }} \
-          --enable-server \
-          --enable-gadget \
-          --enable-inject
+        echo "Apply frida-core and frida-gum patches"
+        git apply ../patches/deliver/frida-core.patch
+        git apply ../patches/deliver/frida-gum.patch
 
-        make -j$(nproc)
-        make install
+        echo "Build using rusda script"
+        export ANDROID_NDK_ROOT="$NDK"
+        bash tools/build-android-all.sh
 
-        echo "Collect artifacts"
-        mkdir -p /tmp/frida-out-${{ matrix.arch }}
+        echo "Package artifact for ${{ matrix.arch }}"
+        STAGING="dist-android/staging-${{ matrix.arch }}"
+        mkdir -p /tmp/hluda-out
 
-        # Copy server, inject, gadget
-        if [ -f "/tmp/frida-custom-${{ matrix.host }}/bin/rusda-server" ]; then
-          cp "/tmp/frida-custom-${{ matrix.host }}/bin/rusda-server" /tmp/frida-out-${{ matrix.arch }}/
-        elif [ -f "subprojects/frida-core/server/frida-server" ]; then
-          cp subprojects/frida-core/server/frida-server /tmp/frida-out-${{ matrix.arch }}/
+        if [ -f "$STAGING/bin/rusda-server" ]; then
+          cp "$STAGING/bin/rusda-server" /tmp/hluda-out/hluda-server
+        fi
+        if [ -f "$STAGING/bin/rusda-inject" ]; then
+          cp "$STAGING/bin/rusda-inject" /tmp/hluda-out/hluda-inject
+        fi
+        BITS=""
+        case "${{ matrix.arch }}" in
+          arm|x86) BITS=32 ;;
+          arm64|x86_64) BITS=64 ;;
+        esac
+        GADGET=$(find "$STAGING/lib" -path "*/${BITS}/rusda-gadget.so" | head -1 || true)
+        if [ -n "$GADGET" ] && [ -f "$GADGET" ]; then
+          cp "$GADGET" /tmp/hluda-out/hluda-gadget.so
         fi
 
-        if [ -f "/tmp/frida-custom-${{ matrix.host }}/bin/rusda-inject" ]; then
-          cp "/tmp/frida-custom-${{ matrix.host }}/bin/rusda-inject" /tmp/frida-out-${{ matrix.arch }}/
-        fi
-
-        # Find gadget
-        find /tmp/frida-custom-${{ matrix.host }}/lib -name "rusda-gadget.so" -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
-        find . -name "frida-gadget.so" -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
-
-        # Find agent so files
-        find . -name 'frida-agent-*.so' -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
-
-        ls -lh /tmp/frida-out-${{ matrix.arch }}/
-
-    - name: Run binary anti-anti-frida patch (topatch)
-      shell: bash
-      run: |-
-        python3 scripts/topatch.py /tmp/frida-out-${{ matrix.arch }}/rusda-server 2>/dev/null || \
-        python3 scripts/topatch.py /tmp/frida-out-${{ matrix.arch }}/frida-server 2>/dev/null || true
-
-        if [ -f /tmp/frida-out-${{ matrix.arch }}/rusda-inject ]; then
-          python3 scripts/topatch.py /tmp/frida-out-${{ matrix.arch }}/rusda-inject
-        fi
-
-        for f in /tmp/frida-out-${{ matrix.arch }}/rusda-gadget.so /tmp/frida-out-${{ matrix.arch }}/frida-gadget.so; do
-          [ -f "$f" ] && python3 scripts/topatch.py "$f" || true
-        done
-
-        for f in /tmp/frida-out-${{ matrix.arch }}/rusda-agent-*.so /tmp/frida-out-${{ matrix.arch }}/frida-agent-*.so; do
-          [ -f "$f" ] && python3 scripts/topatch.py "$f" || true
-        done
-
-    - name: Package artifact
-      shell: bash
-      run: |-
-        VERSION="${{ github.event.inputs.frida_version }}"
-        if [ -z "$VERSION" ]; then
-          VERSION="17.15.0"
-        fi
-
-        PKG="hluda-${VERSION}-android-${{ matrix.arch }}"
-        mkdir -p /tmp/$PKG
-
-        # Rename frida-* to hluda-* in output dir
-        for f in /tmp/frida-out-${{ matrix.arch }}/*; do
-          basename_f=$(basename "$f")
-          newname=$(echo "$basename_f" | sed 's/^frida-/hluda-/')
-          cp "$f" "/tmp/$PKG/$newname"
-        done
-
-        # Create start script
-        printf '%s\n' '#!/bin/bash' 'PORT=custom_port' './hluda-server -l 127.0.0.1:$PORT &' 'echo "Frida listening on 127.0.0.1:$PORT"' > /tmp/$PKG/start.sh
-        chmod +x /tmp/$PKG/start.sh
-
-        # Package as tar.xz
-        cd /tmp && tar cJf $PKG.tar.xz $PKG/
-        ls -lh /tmp/$PKG.tar.xz
+        PKG_NAME="hluda-${VERSION}-android-${{ matrix.arch }}"
+        mkdir -p "/tmp/${PKG_NAME}"
+        cp /tmp/hluda-out/* "/tmp/${PKG_NAME}/"
+        cd /tmp && tar cJf "${PKG_NAME}.tar.xz" "${PKG_NAME}/"
+        ls -lh "/tmp/${PKG_NAME}.tar.xz"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
