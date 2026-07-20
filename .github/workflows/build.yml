@@ -68,32 +68,11 @@ jobs:
         cd frida-src
         git submodule update --init --recursive --depth 1
         echo "Source ready at frida-src/"
-    - name: Apply upstream strongR patches
+    - name: Apply deep source patches
       run: |-
         cd frida-src
-        git config --global user.name "w_zhangfeifei20"
-        git config --global user.email "1141415869@qq.com"
-        # Apply proven upstream anti-detection patches
-        # Patches are made against subproject root (e.g. frida-core/lib/base/rpc.vala)
-        for subproject in frida-core frida-gum; do
-          if [ -d "subprojects/$subproject" ]; then
-            echo "=== Applying patches to subprojects/$subproject ==="
-            cd subprojects/$subproject
-            for p in ../../../patches/strongR-frida/$subproject/*.patch; do
-              if [ -f "$p" ]; then
-                echo "Applying $p"
-                git am "$p" || { echo "Failed to apply $p"; exit 1; }
-              fi
-            done
-            cd ../../
-          fi
-        done
-        echo "All upstream patches applied"
-        
-    - name: Apply deep source patches (optional)
-      run: |-
-        chmod +x scripts/deep-patch-src.py
-        python3 scripts/deep-patch-src.py frida-src || echo "Deep patch failed, continuing with upstream patches only"
+        chmod +x ../scripts/deep-patch-src.py
+        python3 ../scripts/deep-patch-src.py .
     - name: Install build dependencies
       run: |-
         sudo apt update
