@@ -67,7 +67,7 @@ jobs:
     - name: Install cross-compilation dependencies
       run: |-
         sudo apt update
-        sudo apt install -y ${{ matrix.cross }}-gcc ${{ matrix.cross }}-g++ ninja-build meson ccache pkg-config libglib2.0-dev liblzma-dev liblz4-dev libssl-dev libreadline-dev libxml2-dev libsqlite3-dev libcapstone-dev libyaml-dev libunwind-dev autoconf automake libtool cmake graphviz python3-setuptools ${{ matrix.cross }}-pkg-config
+        sudo apt install -y gcc-${{ matrix.cross }} g++-${{ matrix.cross }} ninja-build meson ccache pkg-config libglib2.0-dev liblzma-dev liblz4-dev libssl-dev libreadline-dev libxml2-dev libsqlite3-dev libcapstone-dev libyaml-dev libunwind-dev autoconf automake libtool cmake graphviz python3-setuptools pkg-config-${{ matrix.cross }}
     - name: Build frida-server
       run: |-
         cd frida-src
