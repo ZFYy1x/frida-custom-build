@@ -92,9 +92,8 @@ THREAD_RULES = [
     (r'new Thread<.*?\("frida-(.*?)"', f'new Thread<...>("{PREFIX}-\\1"'),
     (r'g_thread_new\s*\(\s*"frida', f'g_thread_new ("{PREFIX}'),
     (r'g_thread_new\s*\(\s*"gum-js-loop"', f'g_thread_new ("{PREFIX}-js-loop"'),
-    (r'g_set_prgname\s*\(\s*"frida"', f'g_set_prgname ("{PREFIX}"'),
+    (r'g_set_prgname\s*\(\s*"frida"\s*\)', f'g_set_prgname ("{PREFIX}")'),
     (r'g_set_prgname\s*\(\s*NULL\s*\)', f'g_set_prgname ("{PREFIX}")'),
-    (r'g_set_prgname\s*\(', f'g_set_prgname ("{PREFIX}") /* overridden */ // g_set_prgname('),
 ]
 
 # ---------------------------------------------------------------------------
