@@ -92,7 +92,7 @@ jobs:
       id: setup-ndk
       uses: nttld/setup-ndk@v1.0.6
       with:
-        ndk-version: r25b
+        ndk-version: r29
     - name: Show NDK path
       run: echo "NDK=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
     - name: Build frida-server
