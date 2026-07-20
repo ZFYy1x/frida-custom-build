@@ -71,6 +71,8 @@ jobs:
     - name: Apply upstream strongR patches
       run: |-
         cd frida-src
+        git config user.name "w_zhangfeifei20"
+        git config user.email "1141415869@qq.com"
         # Apply proven upstream anti-detection patches
         for p in ../patches/strongR-frida/frida-core/*.patch; do
           echo "Applying $p"
