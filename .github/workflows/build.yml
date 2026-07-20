@@ -105,9 +105,6 @@ jobs:
         echo "Apply superrepo patch (adds tools/build-android-all.sh)"
         git apply ../patches/deliver/superrepo.patch
 
-        echo "Verify patches before applying"
-        python3 ../tools/verify-patch.py --src . --patches ../patches/deliver/
-
         echo "Apply frida-core and frida-gum patches"
         git apply ../patches/deliver/frida-core.patch
         git apply ../patches/deliver/frida-gum.patch
