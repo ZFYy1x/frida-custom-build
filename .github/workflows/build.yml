@@ -52,13 +52,14 @@ jobs:
     steps:
     - name: Checkout custom Frida repo
       uses: actions/checkout@v4
-    - name: Download Frida source tarball
-      run: |-
+    - name: Download Frida source
+      run: |
         VERSION="${{ needs.detect-version.outputs.frida_version }}"
         echo "Building Frida $VERSION for ${{ matrix.arch }}"
-        curl -sL "https://github.com/frida/frida/releases/download/${VERSION}/frida-${VERSION}.tar.xz" -o frida.tar.xz
-        tar xf frida.tar.xz
-        mv frida-* frida-src
+        git clone --depth 1 --branch ${VERSION} https://github.com/frida/frida.git frida-src
+        cd frida-src
+        git submodule update --init --recursive --depth 1
+        echo "Source ready at frida-src/"
     - name: Apply deep source patches (frida-core + libgum)
       run: |
         chmod +x scripts/deep-patch-src.py
