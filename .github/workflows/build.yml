@@ -1,42 +1,24 @@
-name: Build Custom Frida
-'on':
+name: Build Custom Frida (hluda)
+
+on:
   push:
     branches:
-    - master
     - main
+    - master
   pull_request:
     branches:
-    - master
     - main
+    - master
   workflow_dispatch:
     inputs:
       frida_version:
         description: Frida version to build (e.g. 17.16.2)
         required: false
         default: ''
-      architectures:
-        description: Target architectures (comma-separated)
-        required: false
-        default: arm64,armhf
+
 jobs:
-  detect-version:
-    runs-on: ubuntu-24.04
-    outputs:
-      frida_version: ${{ steps.detect.outputs.version }}
-    steps:
-    - name: Detect latest Frida version
-      id: detect
-      run: |-
-        if [ -n "${{ github.event.inputs.frida_version }}" ]; then
-          echo "version=${{ github.event.inputs.frida_version }}" >> $GITHUB_OUTPUT
-        else
-          LATEST=$(curl -sL https://api.github.com/repos/frida/frida/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
-          echo "version=$LATEST" >> $GITHUB_OUTPUT
-          echo "Detected Frida version: $LATEST"
-        fi
-  build:
-    needs: detect-version
-    runs-on: ubuntu-24.04
+  android_build:
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -44,39 +26,47 @@ jobs:
         - arch: android-arm
           host: android-arm
           abi: armeabi-v7a
-          gcc: arm-linux-gnueabihf-gcc
         - arch: android-arm64
           host: android-arm64
           abi: arm64-v8a
-          gcc: aarch64-linux-gnu-gcc
         - arch: android-x86
           host: android-x86
           abi: x86
-          gcc: i686-linux-gnu-gcc
         - arch: android-x86_64
           host: android-x86_64
           abi: x86_64
-          gcc: x86_64-linux-gnu-gcc
+
     steps:
-    - name: Checkout custom Frida repo
+    - name: Checkout custom repo
       uses: actions/checkout@v4
-    - name: Download Frida source
-      run: |-
-        VERSION="${{ needs.detect-version.outputs.frida_version }}"
-        echo "Building Frida $VERSION for ${{ matrix.arch }}"
-        git clone --depth 1 --branch ${VERSION} https://github.com/frida/frida.git frida-src
-        cd frida-src
-        git submodule update --init --recursive --depth 1
-        echo "Source ready at frida-src/"
-    - name: Apply deep source patches
-      run: |-
-        cd frida-src
-        chmod +x ../scripts/deep-patch-src.py
-        python3 ../scripts/deep-patch-src.py .
+
+    - name: Setup Node.js 18
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: Setup JDK 17
+      uses: actions/setup-java@v3
+      with:
+        distribution: temurin
+        java-version: 17
+
+    - name: Setup Android NDK r29
+      id: setup-ndk
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r29
+        local-cache: false
+        link-to-sdk: true
+
+    - name: Setup Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+
     - name: Install build dependencies
       run: |-
-        sudo apt update
-        sudo apt install -y \
+        sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
           build-essential tree ninja-build \
           gcc-multilib g++-multilib lib32stdc++-9-dev \
           flex bison ruby ruby-dev \
@@ -88,111 +78,130 @@ jobs:
           libsqlite3-dev libcapstone-dev libyaml-dev \
           libunwind-dev autoconf automake libtool \
           cmake graphviz
+        sudo gem install fpm -v 1.11.0 --no-document
         python3 -m pip install lief
-    - name: Setup Android NDK
-      id: setup-ndk
-      uses: nttld/setup-ndk@v1.0.6
-      with:
-        ndk-version: r29
-    - name: Show NDK path
-      run: echo "NDK=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
-    - name: Build frida-server
+
+    - name: Build Frida for ${{ matrix.arch }}
+      shell: bash
+      env:
+        ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
       run: |-
-        cd frida-src
-        # Set up NDK environment
-        NDK="${{ env.NDK }}"
-        export ANDROID_NDK_ROOT="$NDK"
+        set -e
+
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        export NDK="$ANDROID_NDK_ROOT"
         export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-        
-        # Build for each architecture using Frida's configure script
-        for HOST in ${{ matrix.host }}; do
-          echo "=== Building for $HOST ==="
-          mkdir -p build-$HOST
-          cd build-$HOST
-          
-          # Run Frida's configure with Android host
-          ../configure --host=$HOST \
-            --prefix=/tmp/frida-custom-$HOST
-          
-          # Build
-          make -j$(nproc)
-          
-          # Collect artifacts
-          mkdir -p /tmp/frida-out-${{ matrix.arch }}
-          cp subprojects/frida-core/server/frida-server /tmp/frida-out-${{ matrix.arch }}/ 2>/dev/null || \
-            cp frida-server /tmp/frida-out-${{ matrix.arch }}/ 2>/dev/null || true
-          find . -name 'frida-agent-*.so' -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
-          
-          cd ..
+        export ANDROID_NDK_ROOT="$NDK"
+
+        VERSION="${{ github.event.inputs.frida_version }}"
+        if [ -z "$VERSION" ]; then
+          VERSION=$(curl -sL https://api.github.com/repos/frida/frida/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+        fi
+        echo "Building Frida $VERSION for ${{ matrix.arch }}"
+
+        # Clone frida with submodules
+        git clone --recurse-submodules https://github.com/frida/frida.git frida-src
+        cd frida-src
+        git checkout "$VERSION"
+        git submodule update --init --recursive --depth 1
+
+        echo "Apply patches to frida-core and frida-gum"
+        for path in ../patches/*
+        do
+          name=$(basename "$path")
+          real=$(realpath "$path")
+          echo "Apply patches in $real to frida-src/subprojects/$name"
+          cd subprojects/$name
+          git apply "$real"/*.patch || { echo "Failed to apply patch in $name"; exit 1; }
+          cd ../../
         done
-        echo "Build complete for ${{ matrix.arch }}"
-    - name: Run deep binary anti-anti-frida patch
+
+        # Configure and build
+        mkdir -p build-${{ matrix.host }}
+        cd build-${{ matrix.host }}
+
+        ../frida-src/configure \
+          --host=${{ matrix.host }} \
+          --prefix=/tmp/frida-custom-${{ matrix.host }} \
+          --enable-server \
+          --enable-gadget \
+          --enable-inject
+
+        make -j$(nproc)
+        make install
+
+        echo "Collect artifacts"
+        mkdir -p /tmp/frida-out-${{ matrix.arch }}
+
+        # Copy server, inject, gadget
+        if [ -f "/tmp/frida-custom-${{ matrix.host }}/bin/rusda-server" ]; then
+          cp "/tmp/frida-custom-${{ matrix.host }}/bin/rusda-server" /tmp/frida-out-${{ matrix.arch }}/
+        elif [ -f "subprojects/frida-core/server/frida-server" ]; then
+          cp subprojects/frida-core/server/frida-server /tmp/frida-out-${{ matrix.arch }}/
+        fi
+
+        if [ -f "/tmp/frida-custom-${{ matrix.host }}/bin/rusda-inject" ]; then
+          cp "/tmp/frida-custom-${{ matrix.host }}/bin/rusda-inject" /tmp/frida-out-${{ matrix.arch }}/
+        fi
+
+        # Find gadget
+        find /tmp/frida-custom-${{ matrix.host }}/lib -name "rusda-gadget.so" -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
+        find . -name "frida-gadget.so" -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
+
+        # Find agent so files
+        find . -name 'frida-agent-*.so' -exec cp {} /tmp/frida-out-${{ matrix.arch }}/ \;
+
+        ls -lh /tmp/frida-out-${{ matrix.arch }}/
+
+    - name: Run binary anti-anti-frida patch (topatch)
+      shell: bash
       run: |-
-        python3 scripts/anti-anti-frida-deep.py /tmp/frida-out-${{ matrix.arch }}/frida-server
-        find /tmp/frida-out-${{ matrix.arch }} -name 'frida-agent-*.so' -exec python3 scripts/anti-anti-frida-deep.py {} \;
-    - name: Verify deep patch effectiveness
-      run: |-
-        python3 scripts/verify-patch-deep.py /tmp/frida-out-${{ matrix.arch }}/frida-server
-        find /tmp/frida-out-${{ matrix.arch }} -name 'frida-agent-*.so' -exec python3 scripts/verify-patch-deep.py {} \;
+        python3 scripts/topatch.py /tmp/frida-out-${{ matrix.arch }}/rusda-server 2>/dev/null || \
+        python3 scripts/topatch.py /tmp/frida-out-${{ matrix.arch }}/frida-server 2>/dev/null || true
+
+        if [ -f /tmp/frida-out-${{ matrix.arch }}/rusda-inject ]; then
+          python3 scripts/topatch.py /tmp/frida-out-${{ matrix.arch }}/rusda-inject
+        fi
+
+        for f in /tmp/frida-out-${{ matrix.arch }}/rusda-gadget.so /tmp/frida-out-${{ matrix.arch }}/frida-gadget.so; do
+          [ -f "$f" ] && python3 scripts/topatch.py "$f" || true
+        done
+
+        for f in /tmp/frida-out-${{ matrix.arch }}/rusda-agent-*.so /tmp/frida-out-${{ matrix.arch }}/frida-agent-*.so; do
+          [ -f "$f" ] && python3 scripts/topatch.py "$f" || true
+        done
+
     - name: Package artifact
+      shell: bash
       run: |-
-        VERSION="${{ needs.detect-version.outputs.frida_version }}"
+        VERSION="${{ github.event.inputs.frida_version }}"
+        if [ -z "$VERSION" ]; then
+          VERSION=$(curl -sL https://api.github.com/repos/frida/frida/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+        fi
+
         PKG="hluda-${VERSION}-android-${{ matrix.arch }}"
         mkdir -p /tmp/$PKG
-        cp /tmp/frida-out-${{ matrix.arch }}/frida-server /tmp/$PKG/
-        cp /tmp/frida-out-${{ matrix.arch }}/frida-agent-*.so /tmp/$PKG/ 2>/dev/null || true
-        echo '#!/bin/bash' > /tmp/$PKG/start.sh
-        echo 'PORT=custom_port' >> /tmp/$PKG/start.sh
-        echo './frida-server -l 127.0.0.1:\$PORT &' >> /tmp/$PKG/start.sh
-        echo 'echo "Frida listening on 127.0.0.1:\$PORT"' >> /tmp/$PKG/start.sh
+
+        # Rename frida-* to hluda-* in output dir
+        for f in /tmp/frida-out-${{ matrix.arch }}/*; do
+          basename_f=$(basename "$f")
+          newname=$(echo "$basename_f" | sed 's/^frida-/hluda-/')
+          cp "$f" "/tmp/$PKG/$newname"
+        done
+
+        # Create start script
+        printf '%s\n' '#!/bin/bash' 'PORT=custom_port' './hluda-server -l 127.0.0.1:$PORT &' 'echo "Frida listening on 127.0.0.1:$PORT"' > /tmp/$PKG/start.sh
         chmod +x /tmp/$PKG/start.sh
+
+        # Package as tar.xz
         cd /tmp && tar cJf $PKG.tar.xz $PKG/
         ls -lh /tmp/$PKG.tar.xz
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: frida-custom-${{ matrix.arch }}
+        name: hluda-${{ matrix.arch }}
         path: /tmp/hluda-*.tar.xz
         retention-days: 30
-  create-release:
-    needs:
-    - build
-    - detect-version
-    runs-on: ubuntu-24.04
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master'
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: /tmp/artifacts
-    - name: Create/Update GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: custom-frida-${{ needs.detect-version.outputs.frida_version }}
-        name: Custom Frida ${{ needs.detect-version.outputs.frida_version }}
-        body: |-
-          Auto-built custom Frida ${{ needs.detect-version.outputs.frida_version }} with deep anti-anti-frida patches.
-          Based on Frida ${{ needs.detect-version.outputs.frida_version }}.
-
-          ## Build System
-          - Based on strongR-frida-android build approach
-          - Uses `./configure --host=<arch>` + `make` (not meson/ninja)
-          - Android NDK r25b via `nttld/setup-ndk`
-          - 4 architectures: android-arm, android-arm64, android-x86, android-x86_64
-
-          ## Patches Applied
-          - Layer 1: Deep source patches (frida-core + libgum, 40+ string replacements, XOR helper)
-          - Layer 2: Binary post-process (LIEF symbols/SONAME/.rodata/.build-id, byte-level)
-          - Layer 3: Runtime bypass script (16 detection types: strstr/strcmp, open/read, fgets, dlopen, pthread, prctl, etc.)
-
-          ## Usage
-          1. adb push hluda-*-android-arm64/frida-server /data/local/tmp/
-          2. adb push hluda-*-android-arm64/frida-agent-arm64.so /data/local/tmp/
-          3. chmod 755 frida-server && ./frida-server -l 127.0.0.1:自定义端口 &
-          4. frida -H 127.0.0.1:自定义端口 -U -f <package>
-          5. Spawn script: -l comprehensive-bypass.js
-        files: /tmp/artifacts/**/*.tar.xz
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
