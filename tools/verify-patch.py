@@ -19,6 +19,8 @@ rusda patch 验证脚本
      编译期源码路径等），方便评估魔改完成度；--paranoid 下视为失败。
 """
 
+from __future__ import annotations
+
 import argparse
 import re
 import subprocess
