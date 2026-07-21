@@ -72,4 +72,9 @@ jobs:
           --repo "$GITHUB_REPOSITORY" \
           --title "dist-android $VERSION" \
           --notes "Automated build of dist-android $VERSION for Android (arm/arm64/x86/x86_64)." \
-          $(find artifacts/ -name '*.xz' -printf '%p ')
+          --draft
+        for f in $(find artifacts/ -name '*.xz' -printf '%p '); do
+          echo "Uploading $f"
+          gh release upload "$TAG" "$f" --repo "$GITHUB_REPOSITORY" --clobber
+        done
+        gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
