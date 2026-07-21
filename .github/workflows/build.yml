@@ -94,6 +94,7 @@ jobs:
         git apply --exclude=releng "$GITHUB_WORKSPACE/patches/deliver/superrepo.patch"
         ( cd subprojects/frida-core && git apply "$GITHUB_WORKSPACE/patches/deliver/frida-core.patch" )
         ( cd subprojects/frida-gum  && git apply "$GITHUB_WORKSPACE/patches/deliver/frida-gum.patch" )
+        mkdir -p src
         cp "$GITHUB_WORKSPACE/tools/enhanced-topatch.py" src/topatch.py
 
     - name: Build Frida for ${{ matrix.arch }}
