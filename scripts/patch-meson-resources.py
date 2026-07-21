@@ -39,7 +39,7 @@ def patch_meson_build(path: Path):
                 if "helpers_bpf_arch_dir  / 'syscall-tracer.elf'," in lines[i]:
                     i += 1
                     continue
-                if "'@INPUT1@'," in lines[i] or "'@INPUT2@'," in lines[i] or "'@INPUT3@'," in lines[i] or "'@INPUT4@'," in lines[i] or "'@INPUT5@'," in lines[i]:
+                if "'@INPUT1@'," in lines[i] or "'@INPUT2@'," in lines[i] or "'@INPUT3@'," in lines[i] or "'@INPUT4@'," in lines[i] or "" in lines[i]:
                     i += 1
                     continue
                 out.append(lines[i])
