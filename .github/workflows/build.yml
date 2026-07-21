@@ -112,3 +112,42 @@ jobs:
         name: dist-android-${{ matrix.arch }}
         path: frida-src/dist-android/*.xz
         retention-days: 7
+
+  release:
+    needs: android_build
+    runs-on: ubuntu-22.04
+    if: github.event_name != 'pull_request'
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts/
+
+    - name: Extract downloaded artifacts
+      run: |
+        find artifacts/ -type f -name '*.zip' | while read -r zip; do
+          dir=$(dirname "$zip")
+          unzip -q "$zip" -d "$dir"
+          rm "$zip"
+        done
+        find artifacts/ -type f -name '*.xz' | sort
+
+    - name: Determine version from artifacts
+      id: version
+      run: |
+        FILE=$(find artifacts/ -name 'rusda-server-*.xz' | head -1)
+        VERSION=$(basename "$FILE" | sed 's/rusda-server-\(.*\)-android-.*/\1/')
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Version: $VERSION"
+
+    - name: Create GitHub Release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        echo "Creating release dist-android-$VERSION"
+        gh release create "dist-android-$VERSION" \
+          --repo "ZFYy1x/frida-custom-build" \
+          --title "dist-android $VERSION" \
+          --notes "Automated build of dist-android $VERSION for Android (arm/arm64/x86/x86_64)." \
+          $(find artifacts/ -name '*.xz' -printf '%p ')
