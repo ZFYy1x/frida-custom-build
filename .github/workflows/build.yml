@@ -66,10 +66,7 @@ jobs:
         sudo apt-get install -y --no-install-recommends \
           build-essential ninja-build pkg-config \
           xz-utils unzip zip \
-          libglib2.0-dev libssl-dev libcapstone-dev \
-          liblzfse-dev libminizip-dev libdwarf-dev libusrsctp-dev \
-          libnice-dev libbpf-dev libsoup-3.0-dev \
-          libjson-glib-dev libgirepository1.0-dev \
+          libglib2.0-dev libssl-dev \
           valac
         pip3 install --user lief
 
