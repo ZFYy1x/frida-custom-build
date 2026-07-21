@@ -136,8 +136,13 @@ jobs:
       with:
         path: artifacts/
 
-    - name: Inspect artifacts
+    - name: Extract downloaded artifacts
       run: |
+        find artifacts/ -type f -name '*.zip' | while read -r zip; do
+          dir=$(dirname "$zip")
+          unzip -q "$zip" -d "$dir"
+          rm "$zip"
+        done
         find artifacts/ -type f -name '*.tar.xz' | sort
 
     - name: Determine version from artifacts
@@ -157,4 +162,4 @@ jobs:
         gh release create "hluda-$VERSION" \
           --title "hluda $VERSION" \
           --notes "Automated build of hluda $VERSION for Android (arm/arm64/x86/x86_64)." \
-          artifacts/**/*.tar.xz
+          $(find artifacts/ -name '*.tar.xz' -printf '%p ')
