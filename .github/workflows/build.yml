@@ -97,9 +97,9 @@ jobs:
         cd frida-src
         python3 tools/verify-patch.py dist-android || true
 
-    - name: Upload staging-${{ matrix.arch }}
+    - name: Upload dist-android for ${{ matrix.arch }}
       uses: actions/upload-artifact@v4
       with:
-        name: staging-${{ matrix.arch }}
-        path: frida-src/dist-android/staging-${{ matrix.arch }}
+        name: dist-android-${{ matrix.arch }}
+        path: frida-src/dist-android/
         retention-days: 7
