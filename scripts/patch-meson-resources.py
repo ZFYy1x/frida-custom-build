@@ -19,6 +19,35 @@ def patch_meson_build(path: Path):
                 i += 1
             continue
 
+        # Simplify helper_backend_data: remove native/bpf helper binary inputs and cleanup command args.
+        if 'helper_backend_data = custom_target(' in line and 'frida-data-helper-backend' in line:
+            out.append(line)
+            i += 1
+            while i < len(lines):
+                if "helpers_native_dir / 'bootstrapper.bin'," in lines[i]:
+                    i += 1
+                    continue
+                if "helpers_native_dir / 'loader.bin'," in lines[i]:
+                    i += 1
+                    continue
+                if "helpers_bpf_noarch_dir  / 'activity-sampler.elf'," in lines[i]:
+                    i += 1
+                    continue
+                if "helpers_bpf_arch_dir  / 'spawn-gater.elf'," in lines[i]:
+                    i += 1
+                    continue
+                if "helpers_bpf_arch_dir  / 'syscall-tracer.elf'," in lines[i]:
+                    i += 1
+                    continue
+                if "'@INPUT1@'," in lines[i] or "'@INPUT2@'," in lines[i] or "'@INPUT3@'," in lines[i] or "'@INPUT4@'," in lines[i] or "'@INPUT5@'," in lines[i]:
+                    i += 1
+                    continue
+                out.append(lines[i])
+                i += 1
+                if i < len(lines) and lines[i-1].strip().startswith('helper_backend_sources += [helper_backend_data]'):
+                    break
+            continue
+
         # Simplify helper_process_data blocks: drop the 4 helper inputs and restore command.
         if 'helper_process_data = custom_target(' in line and 'frida-data-helper-process' in line:
             out.append(line)
