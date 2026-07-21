@@ -27,6 +27,7 @@ new = '''        if quickcompile is not None and quickcompile.exists():
                 print(f"[fallback] quickcompile failed ({e}), emitting empty .qjs files", file=sys.stderr)
                 for source in sources:
                     dest_path = priv_dir / (source.path.stem + ".qjs")
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
                     if not dest_path.exists():
                         dest_path.write_bytes(b"")
         else:
