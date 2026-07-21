@@ -118,6 +118,9 @@ jobs:
         echo "Workaround generate-runtime.py SIGSEGV on x86 host"
         python3 ../scripts/patch-frida-fallbacks.py subprojects/frida-gum/bindings/gumjs/generate-runtime.py subprojects/frida-core/src/embed-helper.py
 
+        echo "Remove missing zymbiote/android inputs from resource targets"
+        python3 ../scripts/patch-meson-resources.py subprojects/frida-core/src/meson.build
+
         echo "Build using rusda script"
         export ANDROID_NDK_ROOT="$NDK"
         bash tools/build-android-all.sh
