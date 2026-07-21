@@ -1,4 +1,4 @@
-name: Build Custom Frida (hluda)
+name: Build dist-android
 
 on:
   push:
