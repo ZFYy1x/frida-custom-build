@@ -41,7 +41,6 @@ jobs:
         mkdir -p artifacts/
         gh run download "${{ steps.run.outputs.run_id }}" \
           --repo "$GITHUB_REPOSITORY" \
-          --name 'dist-android-*' \
           --dir artifacts/
 
     - name: Extract downloaded artifacts
