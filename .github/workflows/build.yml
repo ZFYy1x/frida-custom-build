@@ -113,7 +113,10 @@ jobs:
       run: |
         cd frida-src/dist-android
         echo "Packing dist-android-${{ matrix.arch }}.tar.xz"
-        tar -cJf "dist-android-${{ matrix.arch }}.tar.xz" "${{ matrix.arch }}/"
+        rm -rf "dist-android-${{ matrix.arch }}"
+        mkdir -p "dist-android-${{ matrix.arch }}"
+        cp -a "staging-${{ matrix.arch }}"/* "dist-android-${{ matrix.arch }}/"
+        tar -cJf "dist-android-${{ matrix.arch }}.tar.xz" "dist-android-${{ matrix.arch }}/"
 
     - name: Upload dist-android-${{ matrix.arch }}
       uses: actions/upload-artifact@v4
