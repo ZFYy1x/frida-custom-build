@@ -39,9 +39,9 @@ jobs:
       id: image
       run: |
         IMAGE=ghcr.io/${{ github.repository }}/buildenv:${{ github.sha }}
-        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-        docker build -t "$IMAGE" .
-        docker push "$IMAGE"
+        echo "image=${IMAGE,,}" >> "$GITHUB_OUTPUT"
+        docker build -t "${IMAGE,,}" .
+        docker push "${IMAGE,,}"
 
   android_build:
     runs-on: ubuntu-22.04
