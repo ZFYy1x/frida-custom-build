@@ -1,4 +1,4 @@
-name: Build Custom Frida (hluda) for 17.15.0
+name: Build Custom Frida (hluda)
 
 on:
   push:
@@ -76,6 +76,18 @@ jobs:
         git clone --depth 1 --branch "$VERSION" --recurse-submodules \
           https://github.com/frida/frida.git frida-src
 
+    - name: Determine version
+      id: version
+      run: |
+        cd frida-src
+        VERSION=$(python3 releng/frida_version.py 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-dev\.[0-9]+)?' | head -1)
+        if [ -z "$VERSION" ]; then
+          VERSION="${{ github.event.inputs.frida_version || '17.15.0' }}"
+        fi
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "version=$VERSION" >> "$GITHUB_ENV"
+        echo "::notice::Building hluda $VERSION"
+
     - name: Apply rusda patches for ${{ matrix.arch }}
       run: |
         set -e
@@ -97,9 +109,48 @@ jobs:
         cd frida-src
         python3 tools/verify-patch.py dist-android || true
 
-    - name: Upload dist-android for ${{ matrix.arch }}
+    - name: Pack hluda-${{ matrix.arch }}
+      run: |
+        cd frida-src/dist-android/staging-${{ matrix.arch }}
+        echo "Packing hluda-${{ env.version }}-android-${{ matrix.arch }}.tar.xz"
+        tar -cJf "../../hluda-${{ env.version }}-android-${{ matrix.arch }}.tar.xz" .
+
+    - name: Upload hluda-${{ matrix.arch }}
       uses: actions/upload-artifact@v4
       with:
-        name: dist-android-${{ matrix.arch }}
-        path: frida-src/dist-android/
+        name: hluda-${{ matrix.arch }}
+        path: frida-src/dist-android/hluda-*android-${{ matrix.arch }}.tar.xz
         retention-days: 7
+
+  release:
+    needs: android_build
+    runs-on: ubuntu-22.04
+    if: github.event_name != 'pull_request'
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts/
+
+    - name: Inspect artifacts
+      run: |
+        find artifacts/ -type f -name '*.tar.xz' | sort
+
+    - name: Determine version from artifacts
+      id: version
+      run: |
+        FILE=$(find artifacts/ -name 'hluda-*.tar.xz' | head -1)
+        VERSION=$(basename "$FILE" | sed 's/hluda-\(.*\)-android-.*/\1/')
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Version: $VERSION"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: hluda-${{ steps.version.outputs.version }}
+        name: hluda ${{ steps.version.outputs.version }}
+        files: artifacts/**/*.tar.xz
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
