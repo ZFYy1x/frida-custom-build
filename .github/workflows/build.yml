@@ -111,15 +111,19 @@ jobs:
 
     - name: Pack hluda-${{ matrix.arch }}
       run: |
-        cd frida-src/dist-android/staging-${{ matrix.arch }}
+        cd frida-src/dist-android
         echo "Packing hluda-${{ env.version }}-android-${{ matrix.arch }}.tar.xz"
-        tar -cJf "../../hluda-${{ env.version }}-android-${{ matrix.arch }}.tar.xz" .
+        mkdir -p "hluda-${{ matrix.arch }}"
+        cp "rusda-server-${{ env.version }}-android-${{ matrix.arch }}.xz" "hluda-${{ matrix.arch }}/" 2>/dev/null || true
+        cp "rusda-inject-${{ env.version }}-android-${{ matrix.arch }}.xz" "hluda-${{ matrix.arch }}/" 2>/dev/null || true
+        cp "rusda-gadget-${{ env.version }}-android-${{ matrix.arch }}.so.xz" "hluda-${{ matrix.arch }}/" 2>/dev/null || true
+        tar -cJf "hluda-${{ env.version }}-android-${{ matrix.arch }}.tar.xz" "hluda-${{ matrix.arch }}/"
 
     - name: Upload hluda-${{ matrix.arch }}
       uses: actions/upload-artifact@v4
       with:
         name: hluda-${{ matrix.arch }}
-        path: frida-src/dist-android/hluda-*android-${{ matrix.arch }}.tar.xz
+        path: frida-src/dist-android/hluda-${{ matrix.arch }}/*.xz
         retention-days: 7
 
   release:
