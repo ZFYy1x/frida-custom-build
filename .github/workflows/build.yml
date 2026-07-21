@@ -149,12 +149,12 @@ jobs:
         echo "Version: $VERSION"
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: hluda-${{ steps.version.outputs.version }}
-        name: hluda ${{ steps.version.outputs.version }}
-        files: artifacts/**/*.tar.xz
-        draft: false
-        prerelease: false
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        echo "Creating release hluda-$VERSION"
+        gh release create "hluda-$VERSION" \
+          --title "hluda $VERSION" \
+          --notes "Automated build of hluda $VERSION for Android (arm/arm64/x86/x86_64)." \
+          artifacts/**/*.tar.xz
