@@ -109,20 +109,11 @@ jobs:
         cd frida-src
         python3 tools/verify-patch.py dist-android || true
 
-    - name: Pack dist-android-${{ matrix.arch }}
-      run: |
-        cd frida-src/dist-android
-        echo "Packing dist-android-${{ matrix.arch }}.tar.xz"
-        rm -rf "dist-android-${{ matrix.arch }}"
-        mkdir -p "dist-android-${{ matrix.arch }}"
-        cp -a "staging-${{ matrix.arch }}"/* "dist-android-${{ matrix.arch }}/"
-        tar -cJf "dist-android-${{ matrix.arch }}.tar.xz" "dist-android-${{ matrix.arch }}/"
-
-    - name: Upload dist-android-${{ matrix.arch }}
+    - name: Upload rusda binaries for ${{ matrix.arch }}
       uses: actions/upload-artifact@v4
       with:
         name: dist-android-${{ matrix.arch }}
-        path: frida-src/dist-android/dist-android-${{ matrix.arch }}.tar.xz
+        path: frida-src/dist-android/*.xz
         retention-days: 7
 
   release:
@@ -142,13 +133,13 @@ jobs:
           unzip -q "$zip" -d "$dir"
           rm "$zip"
         done
-        find artifacts/ -type f -name '*.tar.xz' | sort
+        find artifacts/ -type f -name '*.xz' | sort
 
     - name: Determine version from artifacts
       id: version
       run: |
-        FILE=$(find artifacts/ -name 'dist-android-*.tar.xz' | head -1)
-        VERSION=$(basename "$FILE" | sed 's/dist-android-\(.*\)-android-.*/\1/')
+        FILE=$(find artifacts/ -name 'rusda-server-*.xz' | head -1)
+        VERSION=$(basename "$FILE" | sed 's/rusda-server-\(.*\)-android-.*/\1/')
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         echo "Version: $VERSION"
 
@@ -161,4 +152,4 @@ jobs:
         gh release create "hluda-$VERSION" \
           --title "hluda $VERSION" \
           --notes "Automated build of hluda $VERSION for Android (arm/arm64/x86/x86_64)." \
-          $(find artifacts/ -name '*.tar.xz' -printf '%p ')
+          $(find artifacts/ -name '*.xz' -printf '%p ')
