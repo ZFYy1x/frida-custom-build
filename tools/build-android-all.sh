@@ -143,8 +143,8 @@ for arch in x86 x86_64 arm arm64; do
     fi
 done
 
-# 清理 staging
-rm -rf "${OUTPUT_DIR}"/staging-*
+# 保留 staging 目录，供 CI workflow 打包使用
+# rm -rf "${OUTPUT_DIR}"/staging-*
 
 echo ""
 echo "=== 完成 ==="
