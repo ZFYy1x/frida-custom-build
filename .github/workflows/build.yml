@@ -150,6 +150,7 @@ jobs:
         echo "Creating release dist-android-$VERSION"
         gh release create "dist-android-$VERSION" \
           --repo "ZFYy1x/frida-custom-build" \
+          --clobber \
           --title "dist-android $VERSION" \
           --notes "Automated build of dist-android $VERSION for Android (arm/arm64/x86/x86_64)." \
           $(find artifacts/ -name '*.xz' -printf '%p ')
