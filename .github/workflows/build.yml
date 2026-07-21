@@ -81,10 +81,10 @@ jobs:
         set -e
         cd frida-src
         # Apply superrepo patch to root
-        git apply --exclude=releng ../patches/deliver/superrepo.patch
+        git apply --exclude=releng "$GITHUB_WORKSPACE/patches/deliver/superrepo.patch"
         # Apply core/gum patches inside subprojects
-        ( cd subprojects/frida-core && git apply ../../patches/deliver/frida-core.patch )
-        ( cd subprojects/frida-gum  && git apply ../../patches/deliver/frida-gum.patch )
+        ( cd subprojects/frida-core && git apply "$GITHUB_WORKSPACE/patches/deliver/frida-core.patch" )
+        ( cd subprojects/frida-gum  && git apply "$GITHUB_WORKSPACE/patches/deliver/frida-gum.patch" )
 
     - name: Build Frida for ${{ matrix.arch }}
       run: |
