@@ -150,6 +150,7 @@ jobs:
         VERSION="${{ steps.version.outputs.version }}"
         echo "Creating release hluda-$VERSION"
         gh release create "hluda-$VERSION" \
+          --repo "ZFYy1x/frida-custom-build" \
           --title "hluda $VERSION" \
           --notes "Automated build of hluda $VERSION for Android (arm/arm64/x86/x86_64)." \
           $(find artifacts/ -name '*.xz' -printf '%p ')
