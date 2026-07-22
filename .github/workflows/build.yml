@@ -20,7 +20,46 @@ on:
         default: ''
 
 jobs:
+  check:
+    runs-on: ubuntu-22.04
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+    - name: Checkout custom repo
+      uses: actions/checkout@v4
+
+    - name: Setup GitHub CLI
+      run: sudo apt-get install -y gh
+
+    - name: Determine version
+      id: version
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION="${{ github.event.inputs.frida_version }}"
+        if [ -z "$VERSION" ]; then
+          VERSION=$(curl -s https://api.github.com/repos/frida/frida/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+        fi
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Version: $VERSION"
+
+    - name: Check if release already exists
+      id: check
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG="dist-android-${{ steps.version.outputs.version }}"
+        if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName --jq '.tagName' >/dev/null 2>&1; then
+          echo "Release $TAG already exists, skipping build"
+          echo "should_build=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+        fi
+
   android_build:
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -119,9 +158,9 @@ jobs:
         retention-days: 7
 
   release:
-    needs: android_build
+    needs: [check, android_build]
+    if: needs.check.outputs.should_build == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
-    if: github.event_name != 'pull_request'
     permissions:
       contents: write
     steps:
