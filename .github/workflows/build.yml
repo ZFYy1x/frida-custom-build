@@ -9,6 +9,9 @@ on:
     branches:
     - main
     - master
+  schedule:
+    # 每天 UTC 02:00 自动检查并构建最新 Frida
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       frida_version:
