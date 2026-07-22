@@ -192,12 +192,13 @@ jobs:
       run: |
         VERSION="${{ steps.version.outputs.version }}"
         TAG="dist-android-$VERSION"
-        echo "Releasing $TAG"
+        BRANCH="${{ github.ref_name }}"
+        echo "Releasing $TAG from branch $BRANCH"
         gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes || true
         gh release create "$TAG" \
           --repo "$GITHUB_REPOSITORY" \
           --title "dist-android $VERSION" \
-          --notes "Automated build of dist-android $VERSION for Android (arm/arm64/x86/x86_64)." \
+          --notes "Automated build of dist-android $VERSION for Android (arm64) from branch \`$BRANCH\`." \
           --draft
         for f in $(find artifacts/ -name '*.xz' -printf '%p '); do
           echo "Uploading $f"
