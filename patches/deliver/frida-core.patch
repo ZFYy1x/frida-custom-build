@@ -161,7 +161,7 @@ diff --git a/lib/base/linux.vala b/lib/base/linux.vala
 index 6e915e5..2fcfe2f 100644
 --- a/lib/base/linux.vala
 +++ b/lib/base/linux.vala
-@@ -124,7 +124,7 @@ namespace Frida {
+@@ -124,7 +124,9 @@ namespace Frida {
  		}
  
  		private int memfd_create (string name, uint flags) {
