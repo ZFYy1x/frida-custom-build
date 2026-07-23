@@ -139,22 +139,10 @@ index f99f31f..3449f4a 100644
  					var ignore_scope = new ThreadIgnoreScope (FRIDA_THREAD);
  					run_after_transition ();
  					ignore_scope = null;
-@@ -1429,8 +1429,8 @@ namespace Frida.Agent {
- 
- 				emulated_bridge_state = new BridgeState (parameters.str);
- 
--				emulated_worker = new Thread<void> ("frida-agent-emulated", run_emulated_agent);
-+				emulated_worker = new Thread<void> (Obfuscate.S_FRIDA_AGENT_EMULATED, run_emulated_agent);
-
- 				var connection = yield new DBusConnection (stream, ServerGuid.HOST_SESSION_SERVICE,
- 					AUTHENTICATION_SERVER | AUTHENTICATION_ALLOW_ANONYMOUS, null, cancellable);
- }
-
-index 6e915e5..2fcfe2f 100644
 diff --git a/lib/base/linux.vala b/lib/base/linux.vala
 --- a/lib/base/linux.vala
 +++ b/lib/base/linux.vala
-@@ -124,7 +124,42 @@ namespace Frida {
+@@ -124,7 +124,7 @@ namespace Frida {
  		}
  
  		private int memfd_create (string name, uint flags) {
