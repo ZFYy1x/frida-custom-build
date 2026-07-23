@@ -12,10 +12,13 @@ rusda patch 验证脚本
 
 检查项:
   1) 不应出现 (硬性): FridaScriptEngine, GLib-GIO, GDBusProxy, GumScript, gum-js-loop, gmain, gdbus
-  2) 应出现 (硬性):   enignEtpircSadirF/OIG-biLG/yxorPsuBDG/tpircSmuG, russellloop, rmain, rubus
+  2) 应出现 (硬性):   enignEtpircSadirF/OIG-biLG/yxorPsuBDG/tpircSmuG 等反转串,
+                     russellloop/rmain/rubus, [rusda] tracer detected, TracerPid
   3) ELF 架构一致 (硬性): 文件名里的 -android-<arch> 必须与 ELF e_machine 匹配（防止 issue #9：
      64 位构建误打成 32 位 gadget）。
-  4) 残留 frida 字符串 (默认仅告警): 列出仍含 "frida"/"gum" 的字符串（如 libfrida-gadget-raw.so、
+  4) DT_SONAME / DT_NEEDED (硬性): 不应含 libfrida-*（libfrida-core, libfrida-gadget-raw 等）
+  5) 段剥离 (硬性): .comment, .note.gnu.build-id 应为空
+  6) 残留 frida 字符串 (默认仅告警): 列出仍含 "frida"/"gum" 的字符串（如 libfrida-gadget-raw.so、
      编译期源码路径等），方便评估魔改完成度；--paranoid 下视为失败。
 """
 
@@ -46,9 +49,22 @@ GOOD_STRINGS = [
     "OIG-biLG",           # GLib-GIO 反转
     "yxorPsuBDG",         # GDBusProxy 反转
     "tpircSmuG",          # GumScript 反转
+    "rotcejnIadirF",      # FridaInjector 反转
+    "SJmuG",              # GumJS 反转
+    "rorrEadirF",         # FridaError 反转
+    "tnegAadirF",         # FridaAgent 反转
+    "tegdaGadirF",        # FridaGadget 反转
+    "revreSadirF",        # FridaServer 反转
+    "rotpecretnImuG",     # GumInterceptor 反转
+    "ssecorPmuG",         # GumProcess 反转
+    "eroCtpircSmuG",      # GumScriptCore 反转
     "russellloop",        # gum-js-loop
     "rmain",              # gmain
     "rubus",              # gdbus
+    # ---- 运行时自保护 ----
+    "[rusda] tracer detected",  # 反调试日志前缀
+    "PR_SET_DUMPABLE",          # prctl 反 core dump
+    "TracerPid",                # /proc/self/status 检查字段
 ]
 
 # 残留 frida/gum 扫描时，明确「有意保留」的字面量（协议互操作所需，不计入告警）。
@@ -157,6 +173,8 @@ def verify_file(path: Path, strict: bool) -> dict:
         "arch_detail": "",
         "residual": [],
         "readable": True,
+        "elf_dynamic": {},   # DT_SONAME/NEEDED 检查结果
+        "stripped_sections": [],  # 已剥离的段
     }
     try:
         bin_path, tmp = materialize(path)
@@ -186,10 +204,57 @@ def verify_file(path: Path, strict: bool) -> dict:
             res["bad_strict"] = [s for s in BAD_STRINGS_STRICT if s in line_blob]
         res["good"] = [s for s in GOOD_STRINGS if s in line_blob]
         res["residual"] = residual_frida(lines)
+
+        # ELF 动态段检查
+        res["elf_dynamic"] = _check_elf_dynamic(bin_path)
+
+        # 段剥离检查
+        res["stripped_sections"] = _check_stripped_sections(bin_path)
     finally:
         if tmp is not None:
             tmp.unlink(missing_ok=True)
     return res
+
+
+def _check_elf_dynamic(bin_path: Path) -> dict:
+    """检查 DT_SONAME 和 DT_NEEDED 是否已清理。"""
+    result = {"soname": None, "needed": [], "ok": True}
+    try:
+        binary = lief.parse(str(bin_path))
+        if binary is None or not hasattr(binary, "dynamic_entries"):
+            return result
+
+        for entry in binary.dynamic_entries:
+            if entry.tag == lief.ELF.DYNAMIC_TAGS.SONAME:
+                result["soname"] = entry.name
+                if entry.name and "frida" in entry.name.lower():
+                    result["ok"] = False
+            elif entry.tag == lief.ELF.DYNAMIC_TAGS.NEEDED:
+                if entry.name:
+                    result["needed"].append(entry.name)
+                    if "frida" in entry.name.lower():
+                        result["ok"] = False
+    except Exception:
+        pass
+    return result
+
+
+def _check_stripped_sections(bin_path: Path) -> list:
+    """检查 .comment / .note.gnu.build-id 是否已擦除。"""
+    stripped = []
+    try:
+        binary = lief.parse(str(bin_path))
+        if binary is None:
+            return stripped
+        for sec_name in [b".comment", b".note.gnu.build-id"]:
+            sec = binary.get_section(sec_name)
+            if sec is not None:
+                content = bytes(sec.content) if sec.content else b""
+                if len(content) == 0 or content.strip(b"\x00") == b"":
+                    stripped.append(sec_name.decode("utf-8", errors="replace"))
+    except Exception:
+        pass
+    return stripped
 
 
 def find_artifacts(dist_dir: Path) -> list[Path]:
@@ -249,8 +314,10 @@ def main():
     print("检查规则:")
     print("  ✗ 不应出现: FridaScriptEngine, GLib-GIO, GDBusProxy, GumScript, gum-js-loop, gmain, gdbus"
           + (", frida:rpc" if args.strict else ""))
-    print("  ✓ 应出现:   enignEtpircSadirF, OIG-biLG, yxorPsuBDG, tpircSmuG, russellloop, rmain, rubus")
+    print("  ✓ 应出现:   反转串, russellloop/rmain/rubus, [rusda] tracer, TracerPid")
     print("  ⚙ 架构一致: 文件名 arch == ELF e_machine")
+    print("  ⚙ DT_SONAME/NEEDED: 不应含 libfrida-*")
+    print("  ⚙ 段剥离: .comment, .note.gnu.build-id 应为空")
     print("  ⚠ 残留扫描: 仍含 frida/gum 的字符串（默认仅告警）")
     print("-" * 70)
 
@@ -266,6 +333,16 @@ def main():
             failed = True
         if r["arch_ok"] is False:
             failed = True
+        # ELF 动态段检查
+        eld = r.get("elf_dynamic", {})
+        if eld and not eld.get("ok", True):
+            failed = True
+        # 段剥离检查
+        stripped = r.get("stripped_sections", [])
+        if not stripped:
+            # 非 ELF 文件不检查，但 ELF 文件应该有剥离的段
+            if r.get("arch_ok") is not None and r.get("arch_ok"):
+                failed = True
         if args.paranoid and r["residual"]:
             failed = True
         if failed:
@@ -293,6 +370,23 @@ def main():
                 print(f"      - {s[:80]}")
             if len(r["residual"]) > len(shown):
                 print(f"      … 其余 {len(r['residual']) - len(shown)} 条")
+        # ELF 动态段
+        eld = r.get("elf_dynamic", {})
+        if eld:
+            if eld.get("soname"):
+                mark = "✓" if eld.get("ok", True) else "✗"
+                print(f"  {mark} DT_SONAME: {eld['soname']}")
+            if eld.get("needed"):
+                for n in eld["needed"]:
+                    mark = "✓" if "frida" not in n.lower() else "✗"
+                    print(f"  {mark} DT_NEEDED: {n}")
+        # 段剥离
+        stripped = r.get("stripped_sections", [])
+        if stripped:
+            for s in stripped:
+                print(f"  ✓ 已剥离段: {s}")
+        elif r.get("arch_ok") is True:
+            print(f"  ⚠ 未检测到剥离段（.comment/.note.gnu.build-id 可能仍存在）")
 
     print()
     print("=" * 70)

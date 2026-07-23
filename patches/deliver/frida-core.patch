@@ -117,7 +117,7 @@ index f99f31f..3449f4a 100644
  
  		private void keep_running_eternalized () {
 -			agent_gthread = new Thread<bool> ("frida-eternal-agent", () => {
-+			agent_gthread = new Thread<bool> (Obfuscate.decode_hex_xor ("33273c313478302130273b3439783432303b21"), () => {
++			agent_gthread = new Thread<bool> (Obfuscate.S_FRIDA_ETERNAL_AGENT, () => {
  				var ignore_scope = new ThreadIgnoreScope (FRIDA_THREAD);
  
  				agent_tid = Gum.Process.get_current_thread_id ();
@@ -126,7 +126,7 @@ index f99f31f..3449f4a 100644
  				}
  			} else {
 -				agent_gthread = new Thread<bool> ("frida-eternal-agent", () => {
-+				agent_gthread = new Thread<bool> (Obfuscate.decode_hex_xor ("33273c313478302130273b3439783432303b21"), () => {
++				agent_gthread = new Thread<bool> (Obfuscate.S_FRIDA_ETERNAL_AGENT, () => {
  					var ignore_scope = new ThreadIgnoreScope (FRIDA_THREAD);
  					run_after_transition ();
  					ignore_scope = null;
@@ -135,7 +135,7 @@ index f99f31f..3449f4a 100644
  				}
  			} else {
 -				agent_gthread = new Thread<bool> ("frida-eternal-agent", () => {
-+				agent_gthread = new Thread<bool> (Obfuscate.decode_hex_xor ("33273c313478302130273b3439783432303b21"), () => {
++				agent_gthread = new Thread<bool> (Obfuscate.S_FRIDA_ETERNAL_AGENT, () => {
  					var ignore_scope = new ThreadIgnoreScope (FRIDA_THREAD);
  					run_after_transition ();
  					ignore_scope = null;
@@ -144,10 +144,18 @@ index f99f31f..3449f4a 100644
  				emulated_bridge_state = new BridgeState (parameters.str);
  
 -				emulated_worker = new Thread<void> ("frida-agent-emulated", run_emulated_agent);
-+				emulated_worker = new Thread<void> (Obfuscate.decode_hex_xor ("33273c3134783432303b21783038203934213031"), run_emulated_agent);
- 
++				emulated_worker = new Thread<void> (Obfuscate.S_FRIDA_AGENT_EMULATED, run_emulated_agent);
+
  				var connection = yield new DBusConnection (stream, ServerGuid.HOST_SESSION_SERVICE,
  					AUTHENTICATION_SERVER | AUTHENTICATION_ALLOW_ANONYMOUS, null, cancellable);
+
+@@ -400,7 +400,7 @@ namespace Frida.Agent {
+ 			if (stalker_mode != StalkerMode.NONE)
+ 			{
+ 				stalker_gthread = new Thread<void> ("frida-stalker", run_stalker);
++				stalker_gthread = new Thread<void> (Obfuscate.S_FRIDA_STALKER, run_stalker);
+ 				stalker_gthread.start ();
+ 			}
 diff --git a/lib/base/linux.vala b/lib/base/linux.vala
 index 6e915e5..2fcfe2f 100644
 --- a/lib/base/linux.vala
@@ -159,6 +167,41 @@ index 6e915e5..2fcfe2f 100644
 -			return Linux.syscall (LinuxSyscall.MEMFD_CREATE, name, flags);
 +			return Linux.syscall (LinuxSyscall.MEMFD_CREATE, "jit-cache", flags);
  		}
++
++		/**
++		 * 运行时自保护：防止被 ptrace 附加和 core dump 泄露内存。
++		 * 不影响正常功能，仅在检测到调试器时静默降级（不崩溃，不退出）。
++		 */
++		public static void enable_self_protection () {
++			// 1. 禁止 core dump（PR_SET_DUMPABLE = 0）
++			//    这不会影响已附加的调试器，但阻止后续 core dump 泄露内存内容。
++			try {
++				Posix.prctl (Posix.PR_SET_DUMPABLE, 0, 0, 0, 0);
++			} catch (Error e) {
++				// prctl 不可用（非 Linux 或容器环境），跳过
++			}
++
++			// 2. 检测是否已被 ptrace 附加
++			try {
++				var status_path = "/proc/self/status";
++				var status_file = File.new_for_path (status_path);
++				var dis = new DataInputStream (status_file.read ());
++				string line;
++				while ((line = dis.read_line (null)) != null) {
++					if (line.has_prefix ("TracerPid:\t")) {
++						var tracer_pid = int.parse (line.split ("\t")[1]);
++						if (tracer_pid != 0) {
++							// 已被附加，静默降级：不崩溃、不退出，
++							// 但后续的 core dump 仍被阻止（见上条）。
++							warning ("[rusda] tracer detected (pid=%d), self-protection active", tracer_pid);
++						}
++						break;
++					}
++				}
++			} catch (Error e) {
++				// /proc/self/status 不可读（非 Linux 或容器环境），跳过
++			}
++		}
  	}
  
 diff --git a/lib/base/meson.build b/lib/base/meson.build
@@ -178,20 +221,19 @@ new file mode 100644
 index 0000000..5665e80
 --- /dev/null
 +++ b/lib/base/obfuscate.vala
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,57 @@
 +namespace Frida {
 +	/**
 +	 * 运行时解码特征字符串，避免二进制中出现 frida 相关字面量，规避内存扫描。
-+	 * 支持 XOR / Base58 等编码，可替换实现。
++	 * 支持 XOR 编码，可替换实现。
++	 *
++	 * 用法: Obfuscate.S_THREAD_NAME 等常量在编译期计算，运行时仅剩密文。
++	 * 新增字符串时在此处加 const 即可。
 +	 */
 +	namespace Obfuscate {
 +		private const uint8 XOR_KEY = 0x55;
 +
-+		/**
-+		 * 从 hex 编码的 XOR 密文解码字符串。
-+		 * 编译期仅保留 hex 字面量，运行时还原真实字符串。
-+		 */
-+		public static string decode_hex_xor (string hex) {
++		private static string decode (string hex) {
 +			var len = hex.length / 2;
 +			var sb = new StringBuilder.sized (len);
 +			for (var i = 0; i < len; i++) {
@@ -202,6 +244,38 @@ index 0000000..5665e80
 +			}
 +			return sb.str;
 +		}
++
++		// ---- 线程名 / 进程名 ----
++		public const string S_FRIDA_ETERNAL_AGENT  = decode ("33273c313478302130273b3439783432303b21");
++		public const string S_FRIDA_AGENT_EMULATED = decode ("33273c3134783432303b21783038203934213031");
++		public const string S_FRIDA_CERT           = decode ("33273c31347832303b302734213078363027213c333c36342130");
++		public const string S_GADGET_TCP           = decode ("33273c3134783234313230217821362578");
++		public const string S_GADGET_UNIX          = decode ("33273c31347832343132302178203b3c2d");
++		public const string S_FRIDA_STALKER        = decode ("33273c313478262134393e3027");
++		public const string S_FRIDA_TRACE          = decode ("33273c3134782127343630");
++		public const string S_FRIDA_SYSCALL        = decode ("33273c313478262c2636343939");
++
++		// ---- RPC / 错误域 ----
++		public const string S_RPC                  = decode ("33273c31346f272536");
++		public const string S_ERROR_QUARK          = decode ("33273c3134783027273a2778242034273e");
++
++		// ---- GumJS 模块 Glib 日志域名 ----
++		public const string S_LOG_GUMJS_INTERCEPTOR = decode ("3220383f26783c3b213027363025213a27");
++		public const string S_LOG_GUMJS_PROCESS     = decode ("3220383f267825273a36302626");
++		public const string S_LOG_GUMJS_MODULE      = decode ("3220383f2678383a31203930");
++		public const string S_LOG_GUMJS_MEMORY      = decode ("3220383f26783830383a272c");
++		public const string S_LOG_GUMJS_FILE        = decode ("3220383f2678333c3930");
++		public const string S_LOG_GUMJS_STREAM      = decode ("3220383f2678262127303438");
++		public const string S_LOG_GUMJS_SCRIPT      = decode ("3220383f26782636273c2521");
++		public const string S_LOG_GUMJS_SYSTEM      = decode ("3220383f2678262c26213038");
++		public const string S_LOG_GUMJS_STALKER     = decode ("3220383f2678262134393e3027");
++		public const string S_LOG_GUMJS_TRACE       = decode ("3220383f26782127343630");
++		public const string S_LOG_GUMJS_SYSCALL     = decode ("3220383f2678262c2636343939");
++
++		// ---- 其他 ----
++		public const string S_FRIDA_VERSION         = decode ("33273c313478233027263c3a3b");
++		public const string S_BRACKET_FRIDA         = decode ("0e33273c313408");
++		public const string S_RE_FRIDA_HELPER       = decode ("27307b33273c31347b1d3039253027");
 +	}
 +}
 diff --git a/lib/base/p2p.vala b/lib/base/p2p.vala
@@ -213,7 +287,7 @@ index abe5255..c4a2248 100644
  		string? result_key_pem = null;
  
 -		new Thread<bool> ("frida-generate-certificate", () => {
-+		new Thread<bool> (Obfuscate.decode_hex_xor ("33273c31347832303b302734213078363027213c333c36342130"), () => {
++		new Thread<bool> (Obfuscate.S_FRIDA_CERT, () => {
  			uint8[] local_cert_der;
  			string local_cert_pem;
  			string local_key_pem;
@@ -226,7 +300,7 @@ index 97edecf..edd34cc 100644
  		}
  
 +		private static string get_rpc_str (bool quoted) {
-+			var s = Obfuscate.decode_hex_xor ("33273c31346f272536");
++			var s = Obfuscate.S_RPC;
 +			return quoted ? "\"" + s + "\"" : s;
 +		}
 +
@@ -269,7 +343,7 @@ index 8e7e483..7a1079e 100644
  
  			throw (Error) new GLib.Error.literal (
 -				Quark.from_string ("frida-error-quark"),
-+				Quark.from_string (Obfuscate.decode_hex_xor ("33273c3134783027273a2778242034273e")),
++				Quark.from_string (Obfuscate.S_ERROR_QUARK),
  				translate_error (domain, code, description),
  				description);
  		}
@@ -282,7 +356,7 @@ index 230284c..8989410 100644
  				if (inet_address != null) {
  					uint16 listen_port = inet_address.get_port ();
 -					Environment.set_thread_name ("frida-gadget-tcp-%u".printf (listen_port));
-+					Environment.set_thread_name ("%s%u".printf (Obfuscate.decode_hex_xor ("33273c3134783234313230217821362578"), listen_port));
++					Environment.set_thread_name ("%s%u".printf (Obfuscate.S_GADGET_TCP, listen_port));
  					if (request != null) {
  						request.set_value (listen_port);
  					} else {
@@ -291,7 +365,7 @@ index 230284c..8989410 100644
  #if !WINDOWS
  					var unix_address = (UnixSocketAddress) listen_address;
 -					Environment.set_thread_name ("frida-gadget-unix");
-+					Environment.set_thread_name (Obfuscate.decode_hex_xor ("33273c31347832343132302178203b3c2d"));
++					Environment.set_thread_name (Obfuscate.S_GADGET_UNIX);
  					if (request != null) {
  						request.set_value (0);
  					} else {
@@ -434,6 +508,8 @@ index 6154034..eed80a5 100644
  #endif
  
 +    g_set_prgname ("russell");
++
++    frida_enable_self_protection ();
 +
      if (runtime == FRIDA_RUNTIME_OTHER)
      {

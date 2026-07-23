@@ -54,7 +54,7 @@ build_arch() {
 
     echo "[$arch] 开始编译..."
     make -j$(nproc)
-    make install
+    make install-strip
 
     cd "$SRC_ROOT"
     echo "[$arch] 完成"
