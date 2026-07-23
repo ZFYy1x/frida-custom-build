@@ -108,37 +108,6 @@ index 713c731..240ca2d 100644
    install: true,
    install_dir: get_option('bindir'),
  )
-diff --git a/lib/agent/agent.vala b/lib/agent/agent.vala
-index f99f31f..3449f4a 100644
---- a/lib/agent/agent.vala
-+++ b/lib/agent/agent.vala
-@@ -363,7 +363,7 @@ namespace Frida.Agent {
- 		}
- 
- 		private void keep_running_eternalized () {
--			agent_gthread = new Thread<bool> ("frida-eternal-agent", () => {
-+			agent_gthread = new Thread<bool> (Obfuscate.S_FRIDA_ETERNAL_AGENT, () => {
- 				var ignore_scope = new ThreadIgnoreScope (FRIDA_THREAD);
- 
- 				agent_tid = Gum.Process.get_current_thread_id ();
-@@ -559,7 +559,7 @@ namespace Frida.Agent {
- 					assert_not_reached ();
- 				}
- 			} else {
--				agent_gthread = new Thread<bool> ("frida-eternal-agent", () => {
-+				agent_gthread = new Thread<bool> (Obfuscate.S_FRIDA_ETERNAL_AGENT, () => {
- 					var ignore_scope = new ThreadIgnoreScope (FRIDA_THREAD);
- 					run_after_transition ();
- 					ignore_scope = null;
-@@ -667,7 +667,7 @@ namespace Frida.Agent {
- 					assert_not_reached ();
- 				}
- 			} else {
--				agent_gthread = new Thread<bool> ("frida-eternal-agent", () => {
-+				agent_gthread = new Thread<bool> (Obfuscate.S_FRIDA_ETERNAL_AGENT, () => {
- 					var ignore_scope = new ThreadIgnoreScope (FRIDA_THREAD);
- 					run_after_transition ();
- 					ignore_scope = null;
 diff --git a/lib/base/linux.vala b/lib/base/linux.vala
 --- a/lib/base/linux.vala
 +++ b/lib/base/linux.vala
