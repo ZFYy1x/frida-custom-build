@@ -139,7 +139,7 @@ index f99f31f..3449f4a 100644
  					var ignore_scope = new ThreadIgnoreScope (FRIDA_THREAD);
  					run_after_transition ();
  					ignore_scope = null;
-@@ -1429,7 +1429,7 @@ namespace Frida.Agent {
+@@ -1429,8 +1429,8 @@ namespace Frida.Agent {
  
  				emulated_bridge_state = new BridgeState (parameters.str);
  
@@ -150,18 +150,10 @@ index f99f31f..3449f4a 100644
  					AUTHENTICATION_SERVER | AUTHENTICATION_ALLOW_ANONYMOUS, null, cancellable);
  }
 
-@@ -400,7 +400,7 @@ namespace Frida.Agent {
- 			if (stalker_mode != StalkerMode.NONE)
- 			{
- 				stalker_gthread = new Thread<void> ("frida-stalker", run_stalker);
-+				stalker_gthread = new Thread<void> (Obfuscate.S_FRIDA_STALKER, run_stalker);
- 				stalker_gthread.start ();
- 			}
-diff --git a/lib/base/linux.vala b/lib/base/linux.vala
 index 6e915e5..2fcfe2f 100644
 --- a/lib/base/linux.vala
 +++ b/lib/base/linux.vala
-@@ -124,7 +124,9 @@ namespace Frida {
+@@ -124,7 +124,42 @@ namespace Frida {
  		}
  
  		private int memfd_create (string name, uint flags) {
@@ -222,7 +214,7 @@ new file mode 100644
 index 0000000..5665e80
 --- /dev/null
 +++ b/lib/base/obfuscate.vala
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,56 @@
 +namespace Frida {
 +	/**
 +	 * 运行时解码特征字符串，避免二进制中出现 frida 相关字面量，规避内存扫描。
@@ -504,7 +496,7 @@ diff --git a/src/frida-glue.c b/src/frida-glue.c
 index 6154034..eed80a5 100644
 --- a/src/frida-glue.c
 +++ b/src/frida-glue.c
-@@ -56,11 +56,13 @@ frida_init_with_runtime (FridaRuntime rt)
+@@ -56,11 +56,15 @@ frida_init_with_runtime (FridaRuntime rt)
      g_io_module_openssl_register ();
  #endif
  
@@ -684,3 +676,4 @@ index 4d0cd49..c057da2 100644
      except subprocess.CalledProcessError as e:
          print(e, file=sys.stderr)
          print("Output:\n\t| " + "\n\t| ".join(e.output.strip().split("\n")), file=sys.stderr)
+
