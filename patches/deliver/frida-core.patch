@@ -151,6 +151,7 @@ index f99f31f..3449f4a 100644
  }
 
 index 6e915e5..2fcfe2f 100644
+diff --git a/lib/base/linux.vala b/lib/base/linux.vala
 --- a/lib/base/linux.vala
 +++ b/lib/base/linux.vala
 @@ -124,7 +124,42 @@ namespace Frida {
