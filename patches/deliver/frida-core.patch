@@ -149,13 +149,17 @@ index f99f31f..3449f4a 100644
  				var connection = yield new DBusConnection (stream, ServerGuid.HOST_SESSION_SERVICE,
  					AUTHENTICATION_SERVER | AUTHENTICATION_ALLOW_ANONYMOUS, null, cancellable);
 
-@@ -400,7 +400,7 @@ namespace Frida.Agent {
- 			if (stalker_mode != StalkerMode.NONE)
- 			{
- 				stalker_gthread = new Thread<void> ("frida-stalker", run_stalker);
-+				stalker_gthread = new Thread<void> (Obfuscate.S_FRIDA_STALKER, run_stalker);
- 				stalker_gthread.start ();
- 			}
++diff --git a/lib/agent/agent.vala b/lib/agent/agent.vala
++index f99f31f..3449f4a 100644
++--- a/lib/agent/agent.vala
+++++ b/lib/agent/agent.vala
++@@ -400,7 +400,7 @@ namespace Frida.Agent {
++ 			if (stalker_mode != StalkerMode.NONE)
++ 			{
++ 				stalker_gthread = new Thread<void> ("frida-stalker", run_stalker);
+++				stalker_gthread = new Thread<void> (Obfuscate.S_FRIDA_STALKER, run_stalker);
++ 				stalker_gthread.start ();
++ 			}
 diff --git a/lib/base/linux.vala b/lib/base/linux.vala
 index 6e915e5..2fcfe2f 100644
 --- a/lib/base/linux.vala
