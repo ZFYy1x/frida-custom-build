@@ -51,7 +51,7 @@ RODATA_REVERSE_STRINGS = [
     "GumScriptCore",
 ]
 
-# .rodata 中需要 frida→rusda 等长替换的纯内部字符串
+# .rodata 中需要等长替换的非协议字符串（含自定义替换映射）
 RODATA_REPLACE_RUSDA = [
     # --- agent / server 核心 ---
     "Frida Agent",
@@ -93,6 +93,10 @@ RODATA_REPLACE_RUSDA = [
     "gumjs_stream",
     "gumjs_script",
     "gumjs_system",
+    # --- QuickJS 引擎（漏网之鱼，补上） ---
+    "quickjs",
+    "libquickjs",
+    "gum-js",
     # --- 线程/进程名 ---
     "frida-helper",
     "frida-inject",
@@ -121,6 +125,15 @@ RODATA_REPLACE_RUSDA = [
     "frida-portal",
     "frida-relay",
 ]
+
+# 自定义替换映射（key -> value，等长，不走 frida->rusda 逻辑）
+# 注意：patch_address 是原地覆盖，必须等长，否则会破坏相邻数据
+CUSTOM_RODATA_REPLACE = {
+    "quickjs":    "ruickjs",     # 7 -> 7，QuickJS 引擎特征
+    "libquickjs": "libruickjs",  # 10 -> 10，libquickjs 特征
+    "gum-js":     "gum_js",      # 6 -> 6，GumJS 短名（连字符变下划线，maps 不匹配 gum-js）
+    "gumjs":      "rusdjs",      # 5 -> 5，GumJS 无连字符变体
+}
 
 # 编译路径前缀（需要 stripping）
 # 注意：prefix 直接做 bytes.replace，替换为 "src/"（4字节），
@@ -239,6 +252,32 @@ def patch_rodata(binary: lief.Binary) -> None:
                     continue
                 log_color(
                     f"[*] RODATA replace @ {hex(section.file_offset + addr)} "
+                    f"orig:{patch_str} new:{replacement}"
+                )
+                binary.patch_address(section.file_offset + addr, patch)
+
+
+        # 再自定义映射（quickjs/rquickjs 等，不走 frida->rusda 逻辑）
+        for patch_str, replacement in CUSTOM_RODATA_REPLACE.items():
+            if len(patch_str) != len(replacement):
+                log_color(
+                    f"[warn] skip custom {patch_str} -> {replacement}: length mismatch"
+                )
+                continue
+            addr_all = section.search_all(patch_str)
+            if not addr_all:
+                continue
+            patch = [ord(c) for c in replacement]
+            for addr in addr_all:
+                s_at_addr = _str_at(content, addr)
+                if is_protected_string(s_at_addr):
+                    log_color(
+                        f"[*] RODATA custom replace skip (protected) @ {hex(section.file_offset + addr)} "
+                        f"'{s_at_addr[:40]}'"
+                    )
+                    continue
+                log_color(
+                    f"[*] RODATA custom replace @ {hex(section.file_offset + addr)} "
                     f"orig:{patch_str} new:{replacement}"
                 )
                 binary.patch_address(section.file_offset + addr, patch)

@@ -56,6 +56,17 @@ build_arch() {
     make -j$(nproc)
     make install-strip
 
+    # 运行 enhanced-topatch 二进制 patch（抹除残留 frida/gum/quickjs 字符串）
+    if [ -x "${SRC_ROOT}/src/topatch.py" ] || [ -f "${SRC_ROOT}/src/topatch.py" ]; then
+        echo "[$arch] 运行 enhanced-topatch..."
+        python3 "${SRC_ROOT}/src/topatch.py" "${prefix}/bin/rusda-server" 2>/dev/null || true
+        python3 "${SRC_ROOT}/src/topatch.py" "${prefix}/bin/rusda-inject" 2>/dev/null || true
+        gadget="$(find "${prefix}/lib" -path "*/${bits}/rusda-gadget.so" 2>/dev/null | head -1)"
+        if [ -n "$gadget" ] && [ -f "$gadget" ]; then
+            python3 "${SRC_ROOT}/src/topatch.py" "$gadget" 2>/dev/null || true
+        fi
+    fi
+
     cd "$SRC_ROOT"
     echo "[$arch] 完成"
 }

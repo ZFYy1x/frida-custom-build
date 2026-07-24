@@ -38,6 +38,10 @@ BAD_STRINGS = [
     "gum-js-loop",
     "gmain",
     "gdbus",
+    "quickjs",
+    "libquickjs",
+    "gum-js",
+    "gumjs",
 ]
 
 # 严格模式额外检查（Vala 已用 XOR 运行时解码，但 worker.js/message-dispatcher.js 仍含字面量）
@@ -61,6 +65,11 @@ GOOD_STRINGS = [
     "russellloop",        # gum-js-loop
     "rmain",              # gmain
     "rubus",              # gdbus
+    # ---- QuickJS / GumJS 自定义替换 ----
+    "ruickjs",            # quickjs
+    "libruickjs",         # libquickjs
+    "gum_js",             # gum-js (连字符变下划线)
+    "rusdjs",             # gumjs
     # ---- 运行时自保护 ----
     "[rusda] tracer detected",  # 反调试日志前缀
     "PR_SET_DUMPABLE",          # prctl 反 core dump
