@@ -425,25 +425,6 @@ index 245747a..3cd11af 100644
  				make_agent_parameters (pid, t.remote_address, options), cancellable);
  			injectee_by_pid[pid] = id;
  
-diff --git a/src/frida-glue.c b/src/frida-glue.c
-index 6154034..eed80a5 100644
---- a/src/frida-glue.c
-+++ b/src/frida-glue.c
-@@ -56,11 +56,13 @@ frida_init_with_runtime (FridaRuntime rt)
-     g_io_module_openssl_register ();
- #endif
- 
-+    g_set_prgname ("russell");
-+
-     if (runtime == FRIDA_RUNTIME_OTHER)
-     {
-       main_context = g_main_context_ref (g_main_context_default ());
-       main_loop = g_main_loop_new (main_context, FALSE);
--      main_thread = g_thread_new ("frida-main-loop", run_main_loop, NULL);
-+      main_thread = g_thread_new ("rusda-main-loop", run_main_loop, NULL);
-     }
- 
-     g_once_init_leave (&frida_initialized, TRUE);
 diff --git a/src/linux/linux-host-session.vala b/src/linux/linux-host-session.vala
 index 3f5cba7..9a1c442 100644
 --- a/src/linux/linux-host-session.vala
